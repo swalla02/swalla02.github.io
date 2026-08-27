@@ -422,8 +422,8 @@ Model: baseline <code>D + n&middot;t</code>; parallel dispatch divides tool time
       s.appendChild(svgEl("text",{x:px(c),y:Y1+18,"text-anchor":"middle",class:"d-sm"},String(c)));
     });
     s.appendChild(svgEl("text",{x:(X0+X1)/2,y:Y1+38,"text-anchor":"middle",class:"d-tag"},"CONCURRENT TURNS (LOG)"));
-    s.appendChild(svgEl("text",{x:X1,y:Y0+12,"text-anchor":"end",class:"d-tag t-good"},"SPECULATION WINS"));
-    s.appendChild(svgEl("text",{x:X1,y:Y1-8,"text-anchor":"end",class:"d-tag t-brick"},"SPECULATION LOSES"));
+    s.appendChild(svgEl("text",{x:X1-12,y:Y0+14,"text-anchor":"end",class:"d-tag t-good"},"SPECULATION WINS"));
+    s.appendChild(svgEl("text",{x:X1-12,y:Y1-10,"text-anchor":"end",class:"d-tag t-brick"},"SPECULATION LOSES"));
     var here=model(v,v.cc);
     s.appendChild(svgEl("circle",{cx:px(v.cc),cy:py(Math.min(RMAX,here.sBoth)),r:5,class:"t-spec"}));
     s.appendChild(svgEl("line",{x1:px(v.cc),y1:Y0,x2:px(v.cc),y2:Y1,class:"d-rule","stroke-dasharray":"3 3"}));
