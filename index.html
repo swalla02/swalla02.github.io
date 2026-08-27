@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Harness Design Notes</title>
+<meta name="description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency arithmetic behind both.">
+<link rel="canonical" href="https://swalla02.github.io/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="Harness Design Notes">
+<meta property="og:description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency arithmetic behind both.">
+<meta property="og:url" content="https://swalla02.github.io/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-ceiling.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Harness Design Notes">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Harness Design Notes">
+<meta name="twitter:description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency arithmetic behind both.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-ceiling.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F3;--surface:#FBFCFB;--ink:#111B1C;--ink-soft:#3D4E4E;--muted:#5E7070;
+  --rule:#D3DBD9;--teal:#0E7C86;--spec:#C2711A;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0C1416;--surface:#121D1F;--ink:#DCE6E4;--ink-soft:#A9BAB8;--muted:#879998;
+  --rule:#223234;--teal:#4FD4CB;--spec:#E5A54E;
+}}
+:root[data-theme="dark"]{
+  --ground:#0C1416;--surface:#121D1F;--ink:#DCE6E4;--ink-soft:#A9BAB8;--muted:#879998;
+  --rule:#223234;--teal:#4FD4CB;--spec:#E5A54E;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
+  font-size:1.0625rem;line-height:1.62;-webkit-font-smoothing:antialiased;}
+.frame{max-width:940px;margin:0 auto;padding:0 1.5rem;}
+.top{border-bottom:1px solid var(--rule);background:var(--surface);}
+.top .frame{display:flex;align-items:center;gap:.7rem;padding-block:.85rem;}
+.mark{display:block;width:30px;height:30px;flex:0 0 30px;border-radius:3px;
+  background:url(/assets/robot.png) center/cover;}
+.wordmark{font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--muted);}
+.hero{padding:4.5rem 0 2.5rem;}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2.2rem,6vw,3.6rem);
+  line-height:1;letter-spacing:-.032em;margin:0 0 1.2rem;text-wrap:balance;}
+.sub{font-size:1.15rem;color:var(--ink-soft);margin:0;max-width:54ch;text-wrap:pretty;}
+.list{display:grid;gap:1px;background:var(--rule);border-top:1px solid var(--rule);
+  border-bottom:1px solid var(--rule);margin:2.5rem 0 4rem;}
+.card{background:var(--surface);padding:1.6rem 1.5rem;text-decoration:none;color:inherit;
+  display:grid;gap:.45rem;transition:background .15s;}
+.card:hover{background:var(--ground);}
+.card-kind{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--spec);}
+.card h2{font-family:var(--display);font-weight:700;font-size:1.5rem;letter-spacing:-.02em;
+  margin:0;line-height:1.15;}
+.card-kick{margin:0;color:var(--ink-soft);font-size:1rem;}
+.card-go{font-family:var(--mono);font-size:.68rem;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--teal);margin-top:.3rem;}
+footer{border-top:1px solid var(--rule);padding:2rem 0 3.5rem;font-family:var(--mono);
+  font-size:.72rem;line-height:1.85;color:var(--muted);}
+footer a{color:var(--teal);}
+:focus-visible{outline:2px solid var(--teal);outline-offset:3px;}
+</style>
+</head>
+<body>
+<header class="top"><div class="frame">
+  <span class="mark" role="img" aria-label="Site mark"></span>
+  <span class="wordmark">Harness Design Notes</span>
+</div></header>
+
+<div class="hero"><div class="frame">
+  <h1>Latency arithmetic for people who serve models</h1>
+  <p class="sub">Short technical notes on LLM inference and agent harness design. Each one works
+  out the maths, states its assumptions, and tells you when the technique is not worth building.</p>
+</div></div>
+
+<div class="frame">
+  <div class="list">
+      <a class="card" href="/speculation-ceiling/">
+        <span class="card-kind">Essay</span>
+        <h2>The Speculation Ceiling</h2>
+        <p class="card-kick">Streaming overlap caps at 2x. Parallel dispatch does not.</p>
+        <span class="card-go">Read &#8594;</span>
+      </a>
+      <a class="card" href="/speculative-decoding/">
+        <span class="card-kind">Essay</span>
+        <h2>Speculative Decoding</h2>
+        <p class="card-kick">2-3x faster, and mathematically identical output.</p>
+        <span class="card-go">Read &#8594;</span>
+      </a>
+      <a class="card" href="/does-speculation-pay/">
+        <span class="card-kind">Interactive tool</span>
+        <h2>Does Speculation Pay?</h2>
+        <p class="card-kick">Two numbers from your logs. One answer.</p>
+        <span class="card-go">Read &#8594;</span>
+      </a>
+  </div>
+</div>
+
+<footer><div class="frame">
+  Figures marked as models are analytical, not measurements; assumptions are stated in each caption.<br>
+  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a>
+</div></footer>
+</body>
+</html>

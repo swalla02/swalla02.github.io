@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Speculation Ceiling</title>
+<meta name="description" content="Speculative programmatic tool calling is capped at 2x, and the parallel-dispatch half of the idea is worth more than the streaming half.">
+<link rel="canonical" href="https://swalla02.github.io/speculation-ceiling/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="The Speculation Ceiling">
+<meta property="og:description" content="Speculative programmatic tool calling is capped at 2x, and the parallel-dispatch half of the idea is worth more than the streaming half.">
+<meta property="og:url" content="https://swalla02.github.io/speculation-ceiling/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-ceiling.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Speculation Ceiling">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Speculation Ceiling">
+<meta name="twitter:description" content="Speculative programmatic tool calling is capped at 2x, and the parallel-dispatch half of the idea is worth more than the streaming half.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-ceiling.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F3;
+  --surface:#FBFCFB;
+  --sunk:#E8ECEA;
+  --ink:#111B1C;
+  --ink-soft:#3D4E4E;
+  --muted:#5E7070;
+  --rule:#D3DBD9;
+  --rule-soft:#E2E8E6;
+  --teal:#0E7C86;
+  --teal-wash:#0E7C8618;
+  --spec:#C2711A;
+  --spec-wash:#C2711A20;
+  --decode:#4C5C86;
+  --decode-wash:#4C5C8620;
+  --brick:#A24A38;
+
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+
+  --frame:1000px;
+  --measure:38rem;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0C1416;
+    --surface:#121D1F;
+    --sunk:#172426;
+    --ink:#DCE6E4;
+    --ink-soft:#A9BAB8;
+    --muted:#879998;
+    --rule:#223234;
+    --rule-soft:#1B292B;
+    --teal:#4FD4CB;
+    --teal-wash:#4FD4CB1F;
+    --spec:#E5A54E;
+    --spec-wash:#E5A54E24;
+    --decode:#8FA0CC;
+    --decode-wash:#8FA0CC24;
+    --brick:#DE8B77;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0C1416;
+  --surface:#121D1F;
+  --sunk:#172426;
+  --ink:#DCE6E4;
+  --ink-soft:#A9BAB8;
+  --muted:#879998;
+  --rule:#223234;
+  --rule-soft:#1B292B;
+  --teal:#4FD4CB;
+  --teal-wash:#4FD4CB1F;
+  --spec:#E5A54E;
+  --spec-wash:#E5A54E24;
+  --decode:#8FA0CC;
+  --decode-wash:#8FA0CC24;
+  --brick:#DE8B77;
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--ground);
+  color:var(--ink);
+  font-family:var(--body);
+  font-size:1.0625rem;
+  line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+.frame{max-width:var(--frame);margin:0 auto;padding:0 1.5rem;}
+.col{max-width:var(--measure);margin-inline:auto;}
+
+/* ---------- masthead ---------- */
+header.top{border-bottom:1px solid var(--rule);background:var(--surface);}
+.top .frame{display:flex;flex-wrap:wrap;gap:1rem;align-items:baseline;justify-content:space-between;padding-block:.85rem;}
+.wordmark{font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+.tickstrip{display:flex;gap:3px;align-items:center;}
+.tickstrip i{display:block;width:14px;height:7px;border-radius:1px;}
+.tickstrip i.a{background:var(--decode);}
+.tickstrip i.b{background:var(--spec);}
+.tickstrip i.c{background:var(--teal);}
+.tickstrip i.d{background:var(--rule);}
+
+.hero{padding:4.5rem 0 3rem;border-bottom:1px solid var(--rule);}
+.eyebrow{font-family:var(--mono);font-size:.7rem;font-weight:500;letter-spacing:.15em;text-transform:uppercase;color:var(--teal);margin:0 0 1.4rem;}
+h1{
+  font-family:var(--display);font-weight:700;
+  font-size:clamp(2.6rem,7vw,4.5rem);
+  line-height:.94;letter-spacing:-.032em;
+  margin:0 0 1.5rem;text-wrap:balance;
+}
+.standfirst{font-size:1.24rem;line-height:1.5;color:var(--ink-soft);margin:0;text-wrap:pretty;}
+.byline{margin-top:2.4rem;font-family:var(--mono);font-size:.74rem;color:var(--muted);line-height:1.8;}
+.byline a{color:var(--teal);}
+
+main{padding:3rem 0 1rem;}
+h2{
+  font-family:var(--display);font-weight:600;
+  font-size:1.65rem;line-height:1.16;letter-spacing:-.018em;
+  margin:3.6rem 0 1.1rem;text-wrap:balance;
+}
+h2 .claim{display:block;font-family:var(--mono);font-size:.68rem;font-weight:500;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:.7rem;}
+p{margin:0 0 1.15rem;}
+a{color:var(--teal);text-decoration-thickness:1px;text-underline-offset:2px;}
+strong{font-weight:600;}
+em{font-style:italic;}
+code{font-family:var(--mono);font-size:.86em;background:var(--sunk);padding:.1em .34em;border-radius:3px;}
+
+.lede{font-size:1.12rem;}
+.lede::first-letter{
+  font-family:var(--display);font-weight:700;font-size:3.3rem;line-height:.8;
+  float:left;margin:.16em .12em 0 0;color:var(--teal);
+}
+
+/* ---------- figures ---------- */
+figure{margin:2.6rem 0;}
+figure.wide{max-width:none;}
+.fig-head{display:flex;gap:.7rem;align-items:baseline;margin-bottom:.7rem;
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;}
+.fig-num{color:var(--spec);font-weight:600;}
+.fig-name{color:var(--muted);font-weight:500;}
+.plate{background:var(--surface);border:1px solid var(--rule);border-radius:2px;
+  padding:1.4rem 1.1rem;overflow-x:auto;}
+.plate svg{display:block;width:100%;min-width:560px;height:auto;}
+figcaption{margin-top:.75rem;font-family:var(--mono);font-size:.74rem;line-height:1.62;color:var(--muted);}
+figcaption b{color:var(--ink-soft);font-weight:500;}
+
+/* svg primitives */
+.d-box{fill:var(--surface);stroke:var(--rule);stroke-width:1.2;}
+.d-box-sunk{fill:var(--sunk);stroke:var(--rule);stroke-width:1.2;}
+.d-lbl{font-family:var(--mono);font-size:12px;font-weight:500;fill:var(--ink);}
+.d-lbl-sm{font-family:var(--mono);font-size:10.5px;font-weight:400;fill:var(--muted);}
+.d-tag{font-family:var(--mono);font-size:9.5px;font-weight:500;fill:var(--muted);letter-spacing:.09em;}
+.d-line{stroke:var(--ink-soft);stroke-width:1.25;fill:none;}
+.d-line-dash{stroke:var(--brick);stroke-width:1.25;fill:none;stroke-dasharray:5 4;}
+.d-rule{stroke:var(--rule);stroke-width:1;}
+.d-grid{stroke:var(--rule-soft);stroke-width:1;}
+.d-head{fill:var(--ink-soft);}
+.d-head-brick{fill:var(--brick);}
+.bar-decode{fill:var(--decode);}
+.bar-exec{fill:var(--teal);}
+.bar-spec{fill:var(--spec);}
+.wash-spec{fill:var(--spec-wash);}
+.wash-teal{fill:var(--teal-wash);}
+.t-teal{fill:var(--teal);}
+.t-spec{fill:var(--spec);}
+.t-brick{fill:var(--brick);}
+.t-decode{fill:var(--decode);}
+.s-teal{stroke:var(--teal);stroke-width:2;fill:none;}
+.s-spec{stroke:var(--spec);stroke-width:2;fill:none;}
+.s-brick{stroke:var(--brick);stroke-width:2;fill:none;}
+.s-thin{stroke:var(--muted);stroke-width:1.4;fill:none;}
+
+/* ---------- code ---------- */
+pre{
+  font-family:var(--mono);font-size:.8rem;line-height:1.68;
+  background:var(--surface);border:1px solid var(--rule);border-left:2px solid var(--rule);
+  border-radius:2px;padding:.95rem 1.05rem;overflow-x:auto;margin:0;
+}
+pre .c{color:var(--muted);}
+pre .ok{color:var(--teal);}
+pre .no{color:var(--brick);}
+pre .kw{color:var(--decode);}
+
+/* ---------- case table ---------- */
+.cases{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:2px;margin:2rem 0;overflow:hidden;}
+.case{background:var(--surface);padding:1.05rem 1.15rem;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:1.1rem;align-items:start;}
+@media (max-width:720px){.case{grid-template-columns:1fr;}}
+.case-h{font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;margin:0 0 .45rem;}
+.case-b{font-size:.92rem;line-height:1.52;color:var(--ink-soft);margin:0;}
+.case pre{background:var(--sunk);border:none;border-left:2px solid var(--rule);font-size:.755rem;padding:.7rem .8rem;}
+.case.c1 .case-h{color:var(--teal);} .case.c1 pre{border-left-color:var(--teal);}
+.case.c2 .case-h{color:var(--teal);} .case.c2 pre{border-left-color:var(--teal);}
+.case.c3 .case-h{color:var(--spec);} .case.c3 pre{border-left-color:var(--spec);}
+.case.c4 .case-h{color:var(--brick);} .case.c4 pre{border-left-color:var(--brick);}
+
+/* ---------- pull / math ---------- */
+.pull{
+  margin:2.4rem 0;padding:1.3rem 0 1.3rem 1.4rem;
+  border-left:2px solid var(--spec);
+  font-family:var(--display);font-weight:500;font-size:1.3rem;line-height:1.34;
+  letter-spacing:-.014em;color:var(--ink);text-wrap:pretty;
+}
+.math{
+  margin:1.7rem 0;padding:1.15rem 1.25rem;background:var(--surface);
+  border:1px solid var(--rule);border-radius:2px;
+  font-family:var(--mono);font-size:.86rem;line-height:2;text-align:center;
+  overflow-x:auto;
+}
+.math .lbl{display:block;font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin-bottom:.5rem;}
+.math .hi{color:var(--spec);font-weight:600;}
+
+/* ---------- checklist ---------- */
+ol.build{list-style:none;counter-reset:s;padding:0;margin:2rem 0;display:grid;gap:.1rem;}
+ol.build li{counter-increment:s;position:relative;padding:.85rem 0 .85rem 3rem;border-top:1px solid var(--rule-soft);}
+ol.build li:last-child{border-bottom:1px solid var(--rule-soft);}
+ol.build li::before{
+  content:counter(s);position:absolute;left:0;top:.95rem;
+  font-family:var(--mono);font-size:.72rem;font-weight:600;color:var(--spec);
+  border:1px solid var(--rule);border-radius:50%;width:1.6rem;height:1.6rem;
+  display:grid;place-items:center;
+}
+ol.build b{font-weight:600;}
+
+footer{border-top:1px solid var(--rule);margin-top:4.5rem;padding:2.2rem 0 3.5rem;
+  font-family:var(--mono);font-size:.74rem;line-height:1.85;color:var(--muted);}
+footer a{color:var(--teal);}
+:focus-visible{outline:2px solid var(--teal);outline-offset:3px;}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+
+.mark{display:block;width:30px;height:30px;flex:0 0 30px;border-radius:3px;
+  background-image:url(data:image/png;base64,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);background-size:cover;background-position:center;
+  image-rendering:auto;}
+.brand{display:flex;align-items:center;gap:.7rem;min-width:0;}
+
+.backlink{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--mono);
+  font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;}
+.backlink:hover{text-decoration:underline;}
+</style>
+</head>
+<body>
+
+
+<header class="top">
+  <div class="frame">
+    <span class="brand"><span class="mark" role="img" aria-label="Site mark"></span><span class="wordmark">Harness design notes</span></span>
+    <span class="tickstrip" aria-hidden="true"><i class="a"></i><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></span>
+  </div>
+</header>
+<div class="frame" style="padding-top:1.1rem"><a class="backlink" href="/" style="color:var(--teal)">&#8592; All notes</a></div>
+
+<div class="hero">
+  <div class="frame"><div class="col">
+    <p class="eyebrow">Latency · code-as-action harnesses</p>
+    <h1>The Speculation Ceiling</h1>
+    <p class="standfirst">Speculative programmatic tool calling contains two techniques. One is capped at 2× and needs a streaming parser, a shadow interpreter, and a purity allowlist. The other has no cap and needs none of that. Most teams will build the first one.</p>
+    <p class="byline">
+      A response to <a href="https://alexzhang13.github.io/blog/2026/spec-ptc/">Speculative Programmatic Tool Calling</a> by Alex L. Zhang, August 2026.<br>
+      Reference implementation: <a href="https://github.com/alexzhang13/spec-ptc">github.com/alexzhang13/spec-ptc</a>
+    </p>
+  </div></div>
+</div>
+
+<main><div class="frame"><div class="col">
+
+<p class="lede">Alex Zhang's post proposes a clean idea. In a harness where the model writes code and the code calls tools, you don't have to wait for generation to finish before running anything. Parse the partial program as it streams, pre-launch the calls whose arguments you already know, and let the real execution collect cached results when it arrives. He calls it speculative programmatic tool calling, and he measures it at 1&ndash;1.2× on a Recursive Language Model over OOLONG.</p>
+
+<p>He's upfront that the number is modest. It isn't a disappointment. It's a number you could have predicted from two measurements you already have. And once you can predict it, something more useful falls out: the post bundles two distinct techniques under one name, with very different ceilings and very different implementation costs. They are not additive, and the cheap one is worth more.</p>
+
+<h2><span class="claim">Where the wall clock actually goes</span>A turn is two phases, and only one of them is being optimized</h2>
+
+<p>A turn is decode (the model writing the program, call it <code>D</code>), then execute, the program running its tool calls, <code>E</code>. Baseline wall clock is <code>D + E</code>. The calls inside <code>E</code> are usually sub-LLM or sub-agent invocations, so <code>E</code> is dominated by network-bound work that could have started earlier. There are three ways to arrange the same six calls.</p>
+
+<figure class="wide">
+  <div class="fig-head"><span class="fig-num">Fig 1</span><span class="fig-name">Three arrangements of one turn</span></div>
+  <div class="plate">
+  <svg viewBox="0 0 800 322" role="img" aria-label="Three timelines of the same turn: sequential execution ends at 590 time units, parallel dispatch at 315, and speculated dispatch at 295, showing that parallelising the calls captures most of the available saving before streaming speculation adds anything.">
+    <defs>
+      <marker id="f1h" viewBox="0 0 9 7" refX="8.5" refY="3.5" markerWidth="7" markerHeight="6" orient="auto"><path class="d-head" d="M0,0 L9,3.5 L0,7 z"/></marker>
+    </defs>
+
+    <!-- legend -->
+    <g>
+      <rect x="24" y="14" width="26" height="9" rx="1.5" class="bar-decode"/>
+      <text x="57" y="22.5" class="d-tag">DECODE</text>
+      <rect x="126" y="14" width="26" height="9" rx="1.5" class="bar-exec"/>
+      <text x="159" y="22.5" class="d-tag">TOOL CALL, AFTER DECODE</text>
+      <rect x="330" y="14" width="26" height="9" rx="1.5" class="bar-spec"/>
+      <text x="363" y="22.5" class="d-tag">TOOL CALL, SPECULATED DURING DECODE</text>
+    </g>
+
+    <!-- ROW 1 : sequential -->
+    <text x="112" y="66" text-anchor="end" class="d-lbl">sequential</text>
+    <text x="112" y="80" text-anchor="end" class="d-lbl-sm">D + &#8721;Ei</text>
+    <rect x="128" y="52" width="260" height="26" rx="2" class="bar-decode"/>
+    <rect x="388" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="443" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="498" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="553" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="608" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="663" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <line x1="718" y1="44" x2="718" y2="250" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="726" y="68" class="d-lbl-sm">590</text>
+
+    <!-- ROW 2 : parallel dispatch -->
+    <text x="112" y="140" text-anchor="end" class="d-lbl">parallel dispatch</text>
+    <text x="112" y="154" text-anchor="end" class="d-lbl-sm">D + max Ei</text>
+    <rect x="128" y="126" width="260" height="26" rx="2" class="bar-decode"/>
+    <rect x="388" y="126.0" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="130.5" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="135.0" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="139.5" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="144.0" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="148.5" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <line x1="443" y1="118" x2="443" y2="250" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="451" y="142" class="d-lbl-sm">315</text>
+
+    <!-- ROW 3 : speculated -->
+    <text x="112" y="214" text-anchor="end" class="d-lbl">speculated</text>
+    <text x="112" y="228" text-anchor="end" class="d-lbl-sm">max(D, last call)</text>
+    <rect x="128" y="200" width="260" height="26" rx="2" class="bar-decode"/>
+    <rect x="176" y="200.0" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="204" y="204.5" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="232" y="209.0" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="260" y="213.5" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="288" y="218.0" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="316" y="222.5" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <line x1="388" y1="192" x2="388" y2="250" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="396" y="216" class="d-lbl-sm">295</text>
+
+    <!-- saving brackets -->
+    <line x1="443" y1="266" x2="718" y2="266" class="d-line" marker-end="url(#f1h)"/>
+    <line x1="443" y1="262" x2="443" y2="270" class="d-line"/>
+    <text x="580" y="282" text-anchor="middle" class="d-tag t-teal">PARALLEL DISPATCH SAVES 275</text>
+    <line x1="388" y1="298" x2="443" y2="298" class="d-line"/>
+    <line x1="388" y1="294" x2="388" y2="302" class="d-line"/>
+    <line x1="443" y1="294" x2="443" y2="302" class="d-line"/>
+    <text x="455" y="302" class="d-tag t-spec">SPECULATION ADDS 20 MORE</text>
+  </svg>
+  </div>
+  <figcaption><b>The same six independent sub-LLM calls, three schedules.</b> Running them concurrently after decode collapses <code>&#8721;Ei</code> to <code>max Ei</code> and captures 275 of the 295 units available. Launching them <em>during</em> decode, the streaming half of sPTC, recovers the remaining 20. Numbers are illustrative, but the ordering is structural, not a quirk of these values.</figcaption>
+</figure>
+
+<p>That second bracket is the whole argument. Once the calls run concurrently, there is very little left for streaming speculation to win, because the thing it hides is already hidden. The two techniques compete for the same savings, and whichever you implement first collects most of it.</p>
+
+<h2><span class="claim">The mechanism</span>A shadow REPL, and the valve that makes it safe</h2>
+
+<p>The implementation is worth understanding before deciding against half of it. Zhang forks the real namespace with a <code>deepcopy</code> and swaps every speculatable tool for a stub that launches the call and registers a promise. Each time a chunk of tokens arrives, the partial program is re-run in that shadow namespace.</p>
+
+<figure class="wide">
+  <div class="fig-head"><span class="fig-num">Fig 2</span><span class="fig-name">Shadow REPL and the promise store</span></div>
+  <div class="plate">
+  <svg viewBox="0 0 800 400" role="img" aria-label="Streaming tokens feed a parser that re-runs the partial program in a shadow namespace, which launches speculatable calls into a promise store keyed by arguments and occurrence; the real namespace executes the completed cell and looks up cached results, while shadow state is never promoted into the real namespace.">
+    <defs>
+      <marker id="f2h" viewBox="0 0 9 7" refX="8.5" refY="3.5" markerWidth="7" markerHeight="6" orient="auto"><path class="d-head" d="M0,0 L9,3.5 L0,7 z"/></marker>
+      <marker id="f2x" viewBox="0 0 9 7" refX="8.5" refY="3.5" markerWidth="7" markerHeight="6" orient="auto"><path class="d-head-brick" d="M0,0 L9,3.5 L0,7 z"/></marker>
+    </defs>
+
+    <!-- model stream -->
+    <rect x="24" y="44" width="146" height="62" rx="2" class="d-box"/>
+    <text x="97" y="70" text-anchor="middle" class="d-lbl">model</text>
+    <text x="97" y="86" text-anchor="middle" class="d-lbl-sm">streaming tokens</text>
+
+    <!-- parser -->
+    <rect x="246" y="44" width="124" height="62" rx="2" class="d-box"/>
+    <text x="308" y="70" text-anchor="middle" class="d-lbl">parser</text>
+    <text x="308" y="86" text-anchor="middle" class="d-lbl-sm">per chunk</text>
+    <line x1="170" y1="75" x2="242" y2="75" class="d-line" marker-end="url(#f2h)"/>
+    <text x="206" y="66" text-anchor="middle" class="d-tag">PARTIAL CODE</text>
+
+    <!-- workers -->
+    <rect x="600" y="44" width="176" height="62" rx="2" class="d-box"/>
+    <text x="688" y="70" text-anchor="middle" class="d-lbl">sub-LLM workers</text>
+    <text x="688" y="86" text-anchor="middle" class="d-lbl-sm">shared serving engine</text>
+
+    <!-- shadow ns -->
+    <rect x="246" y="158" width="252" height="76" rx="2" class="d-box-sunk"/>
+    <text x="372" y="184" text-anchor="middle" class="d-lbl t-spec">shadow namespace</text>
+    <text x="372" y="201" text-anchor="middle" class="d-lbl-sm">deepcopy fork of locals</text>
+    <text x="372" y="217" text-anchor="middle" class="d-lbl-sm">tools &#8594; speculating stubs</text>
+    <line x1="308" y1="106" x2="308" y2="154" class="d-line" marker-end="url(#f2h)"/>
+    <text x="318" y="134" class="d-tag">RE-RUN</text>
+
+    <!-- promise store -->
+    <rect x="600" y="158" width="176" height="76" rx="2" class="d-box"/>
+    <text x="688" y="184" text-anchor="middle" class="d-lbl t-teal">promise store</text>
+    <text x="688" y="201" text-anchor="middle" class="d-lbl-sm">key = (args, occurrence)</text>
+    <text x="688" y="217" text-anchor="middle" class="d-lbl-sm">not args alone</text>
+    <line x1="498" y1="196" x2="596" y2="196" class="d-line" marker-end="url(#f2h)"/>
+    <text x="547" y="188" text-anchor="middle" class="d-tag">LAUNCH</text>
+
+    <line x1="655" y1="158" x2="655" y2="110" class="d-line" marker-end="url(#f2h)"/>
+    <text x="600" y="138" text-anchor="end" class="d-tag">DISPATCH</text>
+    <line x1="722" y1="106" x2="722" y2="154" class="d-line" marker-end="url(#f2h)"/>
+    <text x="732" y="138" class="d-tag">RESOLVE</text>
+
+    <!-- real ns -->
+    <rect x="246" y="296" width="252" height="76" rx="2" class="d-box"/>
+    <text x="372" y="322" text-anchor="middle" class="d-lbl t-teal">real namespace</text>
+    <text x="372" y="339" text-anchor="middle" class="d-lbl-sm">exec(complete cell)</text>
+    <text x="372" y="355" text-anchor="middle" class="d-lbl-sm">tools &#8594; lookup, else run</text>
+
+    <!-- full cell path down the left -->
+    <path d="M97 106 L97 334 L242 334" class="d-line" marker-end="url(#f2h)"/>
+    <text x="107" y="230" class="d-tag">COMPLETE CELL</text>
+
+    <!-- lookup -->
+    <path d="M498 334 L688 334 L688 238" class="d-line" marker-end="url(#f2h)"/>
+    <text x="593" y="326" text-anchor="middle" class="d-tag t-teal">LOOKUP &#8594; CACHE HIT</text>
+
+    <!-- the valve -->
+    <line x1="372" y1="234" x2="372" y2="292" class="d-line-dash" marker-end="url(#f2x)"/>
+    <circle cx="372" cy="263" r="10" fill="var(--surface)" stroke="var(--brick)" stroke-width="1.25"/>
+    <path d="M367.5 258.5 L376.5 267.5 M376.5 258.5 L367.5 267.5" stroke="var(--brick)" stroke-width="1.4" fill="none"/>
+    <text x="390" y="260" class="d-tag t-brick">SHADOW STATE IS</text>
+    <text x="390" y="272" class="d-tag t-brick">NEVER PROMOTED</text>
+  </svg>
+  </div>
+  <figcaption><b>Speculation runs in a fork that can never write back.</b> The shadow namespace exists only to discover which calls to launch; the completed cell is then executed against the untouched real namespace, where tools resolve from the promise store instead of re-running. Keeping the cell as the unit of computation is what makes a half-written or broken program harmless.</figcaption>
+</figure>
+
+<p>Two design decisions deserve to be copied by anyone building in this space, independent of whether you adopt speculation at all.</p>
+
+<p><strong>The one-way valve.</strong> Shadow state is never promoted into the real namespace. A partially generated program is very often a broken program, and a speculator that mutated real state would leave the harness somewhere no retry could recover from. Treating the cell as an atomic unit costs a <code>deepcopy</code> and buys a system that fails cleanly.</p>
+
+<p><strong>Promises keyed by occurrence, not just arguments.</strong> If a program runs five identical <code>llm_query</code> calls to take a majority vote, keying the cache on arguments alone collapses them into one sample and silently changes the answer. Keying on call site plus occurrence means the speculated trajectory is identical to the unspeculated one. This is the guarantee AsyncFC gives up, and it's the difference between a latency optimization and a semantics change.</p>
+
+<h2><span class="claim">What is actually speculatable</span>Purity is a whole-cell property in practice</h2>
+
+<p>Speculation is only legal when you can determine a call's arguments without running anything that touches the outside world. Zhang's implementation walks four cases.</p>
+
+<div class="cases">
+  <div class="case c1">
+    <div><p class="case-h">Case 1: Literals</p><p class="case-b">Arguments are known from the tokens alone. Launch the moment the call parses; no shadow execution needed.</p></div>
+    <pre><span class="kw">title</span> = llm_query(<span class="ok">"Title for: The Odyssey"</span>)
+<span class="kw">blurb</span> = llm_query(<span class="ok">"Blurb for: The Odyssey"</span>)</pre>
+  </div>
+  <div class="case c2">
+    <div><p class="case-h">Case 2: Pure dependencies</p><p class="case-b">Arguments derive from values the shadow REPL can compute safely. Chains work too: a call can wait on an earlier speculated result and still fire before decode ends.</p></div>
+    <pre>a = llm_query(<span class="ok">"Triage: "</span> + doc)
+c = llm_query(<span class="ok">"Summarize: "</span> + a)  <span class="c"># waits on a</span></pre>
+  </div>
+  <div class="case c3">
+    <div><p class="case-h">Case 3: Peekable or not</p><p class="case-b">A value already sitting in the shadow namespace is peekable. One produced inside a function body the speculator hasn't entered is not. Same file, opposite outcome.</p></div>
+    <pre>side = llm_query(q, chunks[<span class="ok">0</span>])   <span class="c"># peekable</span>
+parts = [gist(c) <span class="kw">for</span> c <span class="kw">in</span> chunks]  <span class="c"># not</span></pre>
+  </div>
+  <div class="case c4">
+    <div><p class="case-h">Case 4: Blocked, and contagious</p><p class="case-b">Anything reaching an unsafe call is refused. Critically, the refusal propagates: every later call whose arguments touch that value is blocked too.</p></div>
+    <pre>notes = open(<span class="ok">"/tmp/x"</span>).read()  <span class="no"># blocked</span>
+b = llm_query(<span class="ok">"Use: "</span> + notes)  <span class="no"># blocked</span></pre>
+  </div>
+</div>
+
+<p>The fourth case is the one that bites in production. Purity gets discussed as a property of individual calls, but blocking propagates through the dataflow, so it behaves like a property of the whole cell. One file read near the top of a program zeroes out the hit rate for everything downstream, and real agent programs read files near the top constantly. Expect measured hit rates well below what the case analysis suggests.</p>
+
+<h2><span class="claim">What it is worth</span>The ceiling is 2×, and only at one point</h2>
+
+<p>Now the arithmetic. Let <code>h</code> be the fraction of execution time you successfully speculate. You save <code>min(hE, D)</code>: you cannot hide more work than there is decode to hide it under.</p>
+
+<div class="math">
+  <span class="lbl">Speedup from streaming overlap</span>
+  (D + E) &divide; (D + E &minus; min(hE, D))<br>
+  <span class="hi">ceiling = 1 + min(D, E) &divide; max(D, E) &nbsp;&le;&nbsp; 2</span>
+</div>
+
+<p>Perfect speculation, infinite engineering, zero overhead: you cannot beat 2×, and you only reach 2× when decode time and execution time are exactly equal. Plot it against <code>E/D</code> and you get a tent.</p>
+
+<figure class="wide">
+  <div class="fig-head"><span class="fig-num">Fig 3</span><span class="fig-name">Speedup ceiling vs. the decode-to-execute ratio</span></div>
+  <div class="plate">
+  <svg viewBox="0 0 800 384" role="img" aria-label="Speedup from streaming speculation plotted against the ratio of execution time to decode time, on a log axis from 0.1 to 10. Every curve peaks at 2x where the ratio is 1 and falls away symmetrically. At a ratio of 0.2 with a perfect hit rate the ceiling is 1.2x, matching the measured result.">
+    <defs>
+    </defs>
+
+    <!-- measured band -->
+    <rect x="92" y="273.7" width="634" height="48.3" class="wash-teal"/>
+    <text x="718" y="291" text-anchor="end" class="d-tag t-teal">MEASURED BAND, ZHANG 2026: 1.0&ndash;1.2&times;</text>
+
+    <!-- gridlines -->
+    <line x1="92" y1="322" x2="726" y2="322" class="d-rule"/>
+    <line x1="92" y1="261.6" x2="726" y2="261.6" class="d-grid"/>
+    <line x1="92" y1="201.1" x2="726" y2="201.1" class="d-grid"/>
+    <line x1="92" y1="140.7" x2="726" y2="140.7" class="d-grid"/>
+    <line x1="92" y1="80.3" x2="726" y2="80.3" class="d-grid"/>
+    <line x1="92" y1="44" x2="92" y2="322" class="d-rule"/>
+
+    <text x="84" y="326" text-anchor="end" class="d-lbl-sm">1.0&times;</text>
+    <text x="84" y="265" text-anchor="end" class="d-lbl-sm">1.25&times;</text>
+    <text x="84" y="205" text-anchor="end" class="d-lbl-sm">1.5&times;</text>
+    <text x="84" y="144" text-anchor="end" class="d-lbl-sm">1.75&times;</text>
+    <text x="84" y="84" text-anchor="end" class="d-lbl-sm">2.0&times;</text>
+
+    <!-- x ticks -->
+    <line x1="92" y1="322" x2="92" y2="327" class="d-rule"/>
+    <line x1="187.4" y1="322" x2="187.4" y2="327" class="d-rule"/>
+    <line x1="313.6" y1="322" x2="313.6" y2="327" class="d-rule"/>
+    <line x1="409" y1="322" x2="409" y2="327" class="d-rule"/>
+    <line x1="504.4" y1="322" x2="504.4" y2="327" class="d-rule"/>
+    <line x1="630.6" y1="322" x2="630.6" y2="327" class="d-rule"/>
+    <line x1="726" y1="322" x2="726" y2="327" class="d-rule"/>
+    <text x="92" y="342" text-anchor="middle" class="d-lbl-sm">0.1</text>
+    <text x="187.4" y="342" text-anchor="middle" class="d-lbl-sm">0.2</text>
+    <text x="313.6" y="342" text-anchor="middle" class="d-lbl-sm">0.5</text>
+    <text x="409" y="342" text-anchor="middle" class="d-lbl-sm">1</text>
+    <text x="504.4" y="342" text-anchor="middle" class="d-lbl-sm">2</text>
+    <text x="630.6" y="342" text-anchor="middle" class="d-lbl-sm">5</text>
+    <text x="726" y="342" text-anchor="middle" class="d-lbl-sm">10</text>
+    <text x="409" y="366" text-anchor="middle" class="d-tag">E / D &nbsp;&#183;&nbsp; EXECUTION TIME &divide; DECODE TIME &nbsp;(LOG)</text>
+
+    <!-- equal line -->
+    <line x1="409" y1="60" x2="409" y2="322" class="d-rule" stroke-dasharray="4 4"/>
+
+    <!-- curves: h = 0.25, 0.5, 0.75, 1.0 -->
+    <polyline class="s-thin" opacity=".55" points="92,316.4 111,315.6 130,314.7 149.1,313.8 168.1,312.7 187.1,311.5 206.1,310.2 225.1,308.7 244.2,307.1 263.2,305.4 282.2,303.5 301.2,301.4 320.2,299.2 339.3,296.9 358.3,294.5 377.3,291.9 396.3,289.3 415.3,286.6 434.4,283.8 453.4,281 472.4,278.2 491.4,275.5 510.4,272.8 529.5,270.2 548.5,267.7 567.5,265.3 586.5,263.1 605.5,264 624.6,271.5 643.6,278 662.6,283.7 681.6,288.6 700.6,292.9 719.7,296.7 726,297.8"/>
+    <polyline class="s-thin" opacity=".75" points="92,310.5 111,308.9 130,307.1 149.1,305 168.1,302.7 187.1,300.1 206.1,297.2 225.1,293.9 244.2,290.3 263.2,286.3 282.2,281.9 301.2,277 320.2,271.8 339.3,266 358.3,259.9 377.3,253.3 396.3,246.3 415.3,238.9 434.4,231.2 453.4,223.3 472.4,215.1 491.4,206.8 504.1,201.3 510.4,206.3 529.5,221.2 548.5,234.2 567.5,245.6 586.5,255.4 605.5,264 624.6,271.5 643.6,278 662.6,283.7 681.6,288.6 700.6,292.9 719.7,296.7 726,297.8"/>
+    <polyline class="s-spec" opacity=".85" points="92,304.3 111,301.8 130,298.9 149.1,295.6 168.1,291.8 187.1,287.5 206.1,282.7 225.1,277.3 244.2,271.1 263.2,264.1 282.2,256.4 301.2,247.6 320.2,237.9 339.3,227.1 358.3,215.1 377.3,201.8 396.3,187.3 415.3,171.5 434.4,154.4 447,142.2 453.4,146.9 472.4,169.5 491.4,189.2 510.4,206.3 529.5,221.2 548.5,234.2 567.5,245.6 586.5,255.4 605.5,264 624.6,271.5 643.6,278 662.6,283.7 681.6,288.6 700.6,292.9 719.7,296.7 726,297.8"/>
+    <polyline class="s-teal" points="92,297.8 111,294.2 130,290.1 149.1,285.4 168.1,280 187.1,273.8 206.1,266.6 225.1,258.4 244.2,249 263.2,238.2 282.2,225.8 301.2,211.5 320.2,195.1 339.3,176.3 358.3,154.8 377.3,130 396.3,101.5 409,80.3 421.7,101.5 440.7,130 459.7,154.8 478.7,176.3 497.8,195.1 516.8,211.5 535.8,225.8 554.8,238.2 573.8,249 592.9,258.4 611.9,266.6 630.9,273.8 649.9,280 668.9,285.4 688,290.1 707,294.2 726,297.8"/>
+
+    <!-- peak callout -->
+    <circle cx="409" cy="80.3" r="3.5" class="t-teal"/>
+    <line x1="416" y1="76" x2="470" y2="60" class="d-line"/>
+    <text x="476" y="58" class="d-tag t-teal">2&times;, ONLY WHERE D = E</text>
+    <text x="476" y="70" class="d-tag">EVERYTHING ELSE IS WORSE</text>
+
+    <!-- measured point -->
+    <circle cx="187.4" cy="273.7" r="3.5" class="t-spec"/>
+    <line x1="187.4" y1="268" x2="187.4" y2="150" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="196" y="146" class="d-tag t-spec">RLM ON OOLONG: E/D &#8776; 0.2 &#8594; 1.2&times;</text>
+
+    <!-- curve labels -->
+    <text x="418" y="94" class="d-lbl-sm t-teal">h = 1.0</text>
+    <text x="452" y="136" class="d-lbl-sm t-spec">h = 0.75</text>
+    <text x="500" y="196" class="d-lbl-sm">h = 0.5</text>
+    <text x="596" y="258" class="d-lbl-sm">h = 0.25</text>
+  </svg>
+  </div>
+  <figcaption><b>A model, not a measurement.</b> Curves are the formula above at four hit rates. The result worth noting: at <code>E/D &#8776; 0.2</code> with a perfect hit rate the ceiling is <em>exactly</em> 1.2×, the top of Zhang's measured band. His implementation appears to be running near the theoretical maximum for its workload. The technique isn't underperforming; the workload has no more to give.</figcaption>
+</figure>
+
+<p>Two things follow that you can act on this week. First, <code>E/D</code> is measurable today with two timers and no new code, and it tells you your ceiling before you write a parser. Below about 0.3, your best case is under 1.3× and the shadow interpreter is not worth maintaining.</p>
+
+<p>Second, and less obvious: being <em>execution</em>-heavy doesn't rescue you either. The tent is symmetric in log space. At <code>E/D = 5</code> you get the same 1.2× as at <code>E/D = 0.2</code>, because now there isn't enough decode to hide the work under. Streaming speculation only pays near balance, which is a narrow place to build for.</p>
+
+<h2><span class="claim">The costs are not capped</span>Purity analysis protects correctness, not the bill</h2>
+
+<p>Zhang's safety analysis is about the <em>inputs</em> to a speculated call. But the calls themselves are sub-LLM invocations: they cost tokens, they occupy queue slots, and they're non-deterministic. A speculation that never gets used is not free the way a mispredicted CPU branch is free.</p>
+
+<figure class="wide">
+  <div class="fig-head"><span class="fig-num">Fig 4</span><span class="fig-name">Returns saturate, spend does not</span></div>
+  <div class="plate">
+  <svg viewBox="0 0 780 356" role="img" aria-label="As speculation aggressiveness increases, latency saved rises then flattens once speculated work exceeds decode time, while token spend continues rising linearly. Past the saturation point, additional speculation buys no latency and costs strictly more.">
+    <defs>
+    </defs>
+
+    <!-- dead zone -->
+    <rect x="335.2" y="48" width="364.8" height="252" class="wash-spec"/>
+    <text x="517" y="70" text-anchor="middle" class="d-tag t-spec">PURE COST: NO FURTHER LATENCY AVAILABLE</text>
+
+    <line x1="92" y1="300" x2="700" y2="300" class="d-rule"/>
+    <line x1="92" y1="48" x2="92" y2="300" class="d-rule"/>
+    <line x1="335.2" y1="40" x2="335.2" y2="300" class="d-rule" stroke-dasharray="4 4"/>
+    <text x="329" y="36" text-anchor="end" class="d-tag">SPECULATED WORK = DECODE TIME</text>
+
+    <!-- latency saved -->
+    <polyline class="s-teal" points="92,300 128.5,262.2 165,224.4 201.4,186.6 237.9,148.8 274.4,111 310.9,73.2 335.2,48 371.7,48 432.5,48 505.4,48 578.4,48 651.4,48 700,48"/>
+    <!-- token spend -->
+    <polyline class="s-brick" points="92,195 140.6,183.2 189.3,171.5 237.9,159.7 286.6,148 335.2,136.2 383.8,124.4 432.5,112.7 481.1,100.9 529.8,89.2 578.4,77.4 627,65.6 700,48"/>
+
+    <text x="345" y="62" class="d-lbl-sm t-teal">latency saved, flat from here</text>
+    <text x="608" y="82" text-anchor="end" class="d-lbl-sm t-brick">tokens billed, still climbing</text>
+    <circle cx="335.2" cy="48" r="3.5" class="t-teal"/>
+    <circle cx="335.2" cy="136.2" r="3.5" class="t-brick"/>
+    <text x="700" y="42" text-anchor="end" class="d-lbl-sm t-brick">2.4&times; baseline spend</text>
+
+    <text x="84" y="304" text-anchor="end" class="d-lbl-sm">none</text>
+    <text x="84" y="52" text-anchor="end" class="d-lbl-sm">max</text>
+    <text x="92" y="322" text-anchor="middle" class="d-lbl-sm">0</text>
+    <text x="396" y="322" text-anchor="middle" class="d-lbl-sm">0.5</text>
+    <text x="700" y="322" text-anchor="middle" class="d-lbl-sm">1.0</text>
+    <text x="396" y="344" text-anchor="middle" class="d-tag">SPECULATION AGGRESSIVENESS: FRACTION OF ELIGIBLE CALLS LAUNCHED EARLY</text>
+  </svg>
+  </div>
+  <figcaption><b>Illustrative, at E/D = 2.5.</b> Latency saved is <code>min(aE, D)</code> and flattens the moment speculated work fills the decode window. Token spend has no such term. It rises with every additional call you launch. The gap to the right of the dashed line is money spent on results that arrive no sooner.</figcaption>
+</figure>
+
+<p>Zhang names the real failure mode himself: the tool serving engine clogged with speculative requests. It's nastier than it sounds. Speculative and real calls hit the same engine, so under concurrency (his own benchmark runs 4 and 8 instances against one vLLM server) aggressive speculation makes the thing you were speeding up slower, exactly when the system is busiest. Backpressure and a cap on in-flight speculation aren't a refinement here. They're load-bearing.</p>
+
+<div class="pull">Speculative execution in a CPU discards a wrong guess for free. Speculative execution over billed, rate-limited sub-agents discards it for money, and takes capacity from the request you actually needed.</div>
+
+<h2><span class="claim">The half that isn't capped</span>Build the scheduler, not the speculator</h2>
+
+<p>Zhang puts the important claim in his final paragraph: the long-run value is in "more clever JIT compilation tricks to overlap tool calls with the actual REPL execution itself." That's the lede.</p>
+
+<p>Parallel dispatch, running independent calls concurrently because the model wrote them sequentially and never reached for <code>asyncio</code>, is bounded by the <em>width of the dependency graph</em>, not by decode time. Six independent calls is a 6× cut in <code>E</code>. Twenty is 20×. There is no tent. And it needs almost none of the machinery: no streaming API, no incremental parser, no shadow interpreter, no purity allowlist for the common case. You parse the completed cell into a dependency graph and schedule it, a problem with forty years of literature behind it.</p>
+
+<p>The lineage is worth naming, because it tells you which problems to expect. This is promise pipelining, as built in the E language and Cap'n Proto: return a promise immediately, let dependent calls reference it, resolve at the boundary. The dependency analysis is dataflow analysis. The shadow REPL is speculative execution minus the rollback. What's new is the setting: the program is written by a model that doesn't know it should have parallelized, and the harness gets to fix that at runtime. It's a compiler problem living inside an agent.</p>
+
+<h2><span class="claim">If you are building this</span>An order of operations</h2>
+
+<ol class="build">
+  <li><b>Measure <code>E/D</code> and the width of your dependency graph.</b> Two timers and an AST walk over logged cells. An afternoon of work that tells you the ceiling of everything below.</li>
+  <li><b>Build parallel dispatch first.</b> Highest ceiling, lowest complexity, no streaming required. If your graphs are wide, stop here. You may have collected the entire win.</li>
+  <li><b>Add streaming speculation only if <code>E/D</code> is still near 1 after step 2</b>, and your remaining calls are serially dependent so parallelism can't touch them. That's the narrow band where it pays.</li>
+  <li><b>Key promises by call site and occurrence, always.</b> Cheap, and it's the difference between a latency win and a silent change to your sampling distribution.</li>
+  <li><b>Cap in-flight speculation, shed under load, and track hit rate as a cost metric.</b> An uncapped speculator degrades the shared engine precisely when you can least afford it.</li>
+</ol>
+
+<p>None of this argues against the post. It's a good one, the implementation is small and readable, and the two design decisions in Fig 2 are worth stealing whatever else you conclude. The claim I'd add is that the interesting result isn't the speedup. It's that a harness executing model-written code has quietly become a runtime, and it inherits every scheduling, caching, and backpressure question runtimes have always had. Speculation is the first of those to arrive. It won't be the last.</p>
+
+</div></div></main>
+
+<footer><div class="frame"><div class="col">
+Source: Alex L. Zhang, <a href="https://alexzhang13.github.io/blog/2026/spec-ptc/">Speculative Programmatic Tool Calling</a>, August 2026. Benchmarks quoted from that post: OOLONG (trec-coarse, 132k) and OOLONG-Pairs (32k), Qwen3-30B-A3B-Instruct on 8&times;H100 via vLLM.<br>
+Prior art referenced: Conveyor (Xu et al., 2024); Speculative Interaction Agents (Hooper et al., 2026); AsyncFC (Feng et al., 2026).<br><br>
+Figures 3 and 4 are analytical models derived here, not measurements. Figure 1 uses illustrative units. Figure 2 follows the reference implementation.
+</div></div></footer>
+
+</body>
+</html>
