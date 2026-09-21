@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What the Price Card Implies</title>
+<meta name="description" content="TypeSafe AI sells Jev at $0.042 per million input tokens, output free. Work out what that flat price implies about the model behind it, and where a linear price stops covering quadratic cost.">
+<link rel="canonical" href="https://swalla02.github.io/jev-economics/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="What the Price Card Implies">
+<meta property="og:description" content="TypeSafe AI sells Jev at $0.042 per million input tokens, output free. Work out what that flat price implies about the model behind it, and where a linear price stops covering quadratic cost.">
+<meta property="og:url" content="https://swalla02.github.io/jev-economics/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="What the Price Card Implies">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="What the Price Card Implies">
+<meta name="twitter:description" content="TypeSafe AI sells Jev at $0.042 per million input tokens, output free. Work out what that flat price implies about the model behind it, and where a linear price stops covering quadratic cost.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F3; --surface:#FBFCFB; --sunk:#E8ECEA; --raise:#FFFFFF;
+  --ink:#111B1C; --ink-soft:#3D4E4E; --muted:#5E7070;
+  --rule:#D3DBD9; --rule-soft:#E2E8E6;
+  --teal:#0E7C86; --teal-wash:#0E7C8618;
+  --spec:#C2711A; --spec-wash:#C2711A20;
+  --decode:#4C5C86; --decode-wash:#4C5C8620;
+  --brick:#A24A38; --brick-wash:#A24A3818;
+  --good:#1F7350; --good-wash:#1F735016;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0C1416; --surface:#121D1F; --sunk:#172426; --raise:#1B292B;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1B292B;
+  --teal:#4FD4CB; --teal-wash:#4FD4CB1F;
+  --spec:#E5A54E; --spec-wash:#E5A54E24;
+  --decode:#8FA0CC; --decode-wash:#8FA0CC24;
+  --brick:#DE8B77; --brick-wash:#DE8B7720;
+  --good:#57C68F; --good-wash:#57C68F1C;
+}}
+:root[data-theme="dark"]{
+  --ground:#0C1416; --surface:#121D1F; --sunk:#172426; --raise:#1B292B;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1B292B;
+  --teal:#4FD4CB; --teal-wash:#4FD4CB1F;
+  --spec:#E5A54E; --spec-wash:#E5A54E24;
+  --decode:#8FA0CC; --decode-wash:#8FA0CC24;
+  --brick:#DE8B77; --brick-wash:#DE8B7720;
+  --good:#57C68F; --good-wash:#57C68F1C;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
+  font-size:1rem;line-height:1.6;-webkit-font-smoothing:antialiased;}
+.frame{max-width:1120px;margin:0 auto;padding:0 1.4rem;}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2rem,5vw,3.1rem);
+  line-height:.97;letter-spacing:-.03em;margin:0 0 .7rem;text-wrap:balance;}
+.eyebrow{font-family:var(--mono);font-size:.66rem;font-weight:500;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--teal);margin:0 0 1.1rem;}
+.sub{font-size:1.06rem;color:var(--ink-soft);margin:0;max-width:52ch;text-wrap:pretty;}
+header.top{border-bottom:1px solid var(--rule);background:var(--surface);}
+.top .frame{display:flex;justify-content:space-between;align-items:center;padding-block:.75rem;gap:1rem;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:.6rem;}
+.mark{display:block;width:26px;height:26px;flex:0 0 26px;border-radius:3px;
+  background:url(/assets/robot.png) center/cover;}
+.kick{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+.kick a{color:var(--teal);}
+.hero{padding:3rem 0 1.4rem;}
+
+h2.sec{font-family:var(--display);font-weight:700;font-size:1.6rem;letter-spacing:-.022em;
+  margin:2.6rem 0 .8rem;line-height:1.15;}
+h2.sec .n{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.14em;
+  color:var(--spec);display:block;margin-bottom:.4rem;}
+.note{font-size:.98rem;color:var(--ink-soft);max-width:66ch;margin:0 0 1rem;}
+.note b{font-weight:600;color:var(--ink);}
+code{font-family:var(--mono);font-size:.85em;background:var(--sunk);padding:.08em .32em;border-radius:3px;}
+.eq{font-family:var(--mono);font-size:.86rem;background:var(--surface);border:1px solid var(--rule);
+  border-left:2px solid var(--teal);border-radius:3px;padding:.85rem 1rem;margin:0 0 1.2rem;
+  overflow-x:auto;color:var(--ink-soft);line-height:1.9;}
+.eq b{color:var(--ink);font-weight:600;}
+
+/* verdict */
+.verdict{background:var(--surface);border:1px solid var(--rule);border-radius:3px;
+  padding:1.4rem 1.5rem;margin:0 0 1.5rem;display:grid;grid-template-columns:auto 1fr;gap:1.8rem;align-items:center;}
+@media (max-width:640px){.verdict{grid-template-columns:1fr;gap:1rem;}}
+.verdict-num{font-family:var(--display);font-weight:700;font-size:3.4rem;line-height:.9;
+  letter-spacing:-.04em;font-variant-numeric:tabular-nums;}
+.verdict-label{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:.5rem;}
+.verdict-say{font-size:1.02rem;line-height:1.5;margin:0;color:var(--ink-soft);}
+.verdict-say b{color:var(--ink);font-weight:600;}
+.pill{display:inline-block;font-family:var(--mono);font-size:.64rem;font-weight:600;
+  letter-spacing:.11em;text-transform:uppercase;padding:.28rem .6rem;border-radius:2px;margin-bottom:.6rem;}
+.pill.yes{background:var(--good-wash);color:var(--good);}
+.pill.maybe{background:var(--spec-wash);color:var(--spec);}
+.pill.no{background:var(--brick-wash);color:var(--brick);}
+.t-good{color:var(--good);} .t-spec{color:var(--spec);} .t-brick{color:var(--brick);}
+
+/* layout */
+.grid{display:grid;grid-template-columns:288px 1fr;gap:1.7rem;align-items:start;margin-bottom:1rem;}
+@media (max-width:900px){.grid{grid-template-columns:1fr;}}
+.rail{position:sticky;top:1rem;}
+@media (max-width:900px){.rail{position:static;}}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:1.15rem 1.2rem;}
+.panel h2{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);margin:0 0 1rem;}
+.panel h2.mt{margin-top:1.7rem;}
+
+.field{margin-bottom:1rem;}
+.field label{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;
+  font-family:var(--mono);font-size:.7rem;font-weight:500;color:var(--ink-soft);margin-bottom:.35rem;}
+.field .val{color:var(--teal);font-weight:600;font-variant-numeric:tabular-nums;}
+.field .hint{display:block;font-family:var(--mono);font-size:.62rem;color:var(--muted);
+  margin-top:.3rem;line-height:1.45;}
+input[type=range]{width:100%;accent-color:var(--teal);height:1.2rem;background:transparent;cursor:pointer;}
+input[type=number],select{width:100%;font-family:var(--mono);font-size:.82rem;padding:.4rem .5rem;
+  background:var(--sunk);border:1px solid var(--rule);border-radius:2px;color:var(--ink);}
+input[type=number]:disabled{opacity:.5;}
+.duo{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;}
+.check{display:flex;align-items:flex-start;gap:.5rem;font-family:var(--mono);font-size:.7rem;
+  color:var(--ink-soft);margin-bottom:.9rem;line-height:1.4;cursor:pointer;}
+.check input{accent-color:var(--teal);margin:.15rem 0 0;flex:0 0 auto;cursor:pointer;}
+.derived{font-family:var(--mono);font-size:.62rem;color:var(--muted);background:var(--sunk);
+  border-radius:2px;padding:.5rem .6rem;margin:-.4rem 0 1rem;line-height:1.6;}
+.derived b{color:var(--teal);font-weight:600;}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:1.6rem;}
+.stat{background:var(--surface);padding:.8rem .85rem;}
+.stat .k{font-family:var(--mono);font-size:.6rem;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);display:block;margin-bottom:.3rem;}
+.stat .v{font-family:var(--display);font-weight:600;font-size:1.28rem;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;}
+.stat .u{font-family:var(--mono);font-size:.66rem;color:var(--muted);margin-left:.15rem;}
+
+figure{margin:0 0 1.2rem;}
+.fig-head{display:flex;gap:.6rem;align-items:baseline;margin-bottom:.55rem;
+  font-family:var(--mono);font-size:.64rem;letter-spacing:.13em;text-transform:uppercase;}
+.fig-head .n{color:var(--spec);font-weight:600;}
+.fig-head .t{color:var(--muted);}
+.plate{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:1rem .9rem;overflow-x:auto;}
+.plate svg{display:block;width:100%;min-width:560px;height:auto;}
+figcaption{margin-top:.55rem;font-family:var(--mono);font-size:.68rem;line-height:1.6;color:var(--muted);}
+.legend{display:flex;flex-wrap:wrap;gap:.9rem;margin:.6rem 0 0;font-family:var(--mono);font-size:.64rem;color:var(--ink-soft);}
+.legend span{display:flex;align-items:center;gap:.35rem;}
+.legend i{width:14px;height:2px;border-radius:1px;display:block;}
+
+.d-lbl{font-family:var(--mono);font-size:11.5px;font-weight:500;fill:var(--ink);}
+.d-sm{font-family:var(--mono);font-size:10px;fill:var(--muted);}
+.d-tag{font-family:var(--mono);font-size:10.5px;font-weight:600;}
+.d-rule{stroke:var(--rule);stroke-width:1;}
+.d-line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}
+
+table.asm{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.72rem;margin:0 0 1.2rem;}
+table.asm th,table.asm td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--rule);vertical-align:top;}
+table.asm th{color:var(--muted);font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:.62rem;}
+table.asm td:first-child{color:var(--ink);white-space:nowrap;}
+table.asm td:nth-child(2){color:var(--teal);white-space:nowrap;}
+table.asm td:last-child{color:var(--ink-soft);}
+
+.reset{font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;
+  background:none;border:1px solid var(--rule);color:var(--muted);padding:.4rem .7rem;
+  border-radius:2px;cursor:pointer;width:100%;margin-top:.4rem;}
+.reset:hover{color:var(--ink);border-color:var(--muted);}
+.backlink{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--teal);
+  text-decoration:none;display:inline-block;margin:1.4rem 0 0;}
+footer{border-top:1px solid var(--rule);margin-top:2.4rem;padding:1.8rem 0 3rem;
+  font-family:var(--mono);font-size:.7rem;line-height:1.8;color:var(--muted);}
+footer a{color:var(--teal);}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="frame">
+  <span class="brand"><span class="mark" role="img" aria-label="Site mark"></span>
+  <span class="kick">Harness Design Notes</span></span>
+  <span class="kick"><a href="/">All notes</a></span>
+</div></header>
+
+<div class="hero"><div class="frame">
+  <p class="eyebrow">Unit economics</p>
+  <h1>What the price card implies</h1>
+  <p class="sub">TypeSafe AI sells Jev at $0.042 per million input tokens, output free.
+  That is a linear price. The cost underneath it is not.</p>
+</div></div>
+
+<div class="frame">
+
+<p class="note">A published price is a constraint. It has to cover the FLOPs the model burns, on
+hardware you can actually rent, or it is a subsidy. Working backwards from $0.042 per million
+input tokens tells you roughly how big the model can be, and — more interestingly — which
+workloads a flat per-input-token price cannot cover at any model size.</p>
+
+<p class="note">Three things move the answer. Weights cost <code>2P</code> FLOPs per token slot.
+Attention adds <code>4·L·d·n_layers</code>, which grows with the context, so cost is quadratic in
+document length where revenue is linear. And Jev answers N questions per document against a
+published price that never says which side of &ldquo;input tokens, output free&rdquo; a typed
+question falls on — a definition worth more than it sounds. The panel below is that arithmetic;
+the figures are the same model swept along one axis at a time.</p>
+
+<div class="grid">
+
+  <div class="rail">
+  <div class="panel">
+    <h2>The model</h2>
+
+    <div class="field">
+      <label for="p">Parameters <span class="val" id="o-p"></span></label>
+      <input type="range" id="p" min="8.48" max="11.3" step="0.01" value="9.48">
+    </div>
+    <label class="check"><input type="checkbox" id="auto" checked>
+      Derive shape from parameter count</label>
+    <div class="derived" id="o-shape"></div>
+    <div class="duo" style="margin-bottom:1rem">
+      <div class="field" style="margin:0">
+        <label for="dm">d_model</label>
+        <input type="number" id="dm" min="256" max="20480" step="128" value="3175" disabled>
+      </div>
+      <div class="field" style="margin:0">
+        <label for="nl">layers</label>
+        <input type="number" id="nl" min="2" max="140" step="1" value="25" disabled>
+      </div>
+    </div>
+
+    <h2 class="mt">The workload</h2>
+    <div class="field">
+      <label for="l">Document tokens <span class="val" id="o-l"></span></label>
+      <input type="range" id="l" min="3" max="6.3" step="0.01" value="4.505">
+    </div>
+    <div class="field">
+      <label for="n">Questions per document <span class="val" id="o-n"></span></label>
+      <input type="range" id="n" min="0" max="4" step="0.01" value="2.301">
+    </div>
+    <div class="field">
+      <label for="q">Question length <span class="val"><span id="o-q"></span> tok</span></label>
+      <input type="range" id="q" min="1" max="64" step="1" value="8">
+    </div>
+    <div class="field">
+      <label for="dep">Question slot depth <span class="val" id="o-dep"></span></label>
+      <input type="range" id="dep" min="0.05" max="1" step="0.05" value="1">
+      <span class="hint">Share of the stack a question slot traverses. 1.0 treats it as a full
+      token slot; lower models a thin cross-attention readout head. Unpublished — this is the
+      widest assumption on the page.</span>
+    </div>
+
+    <h2 class="mt">The rig</h2>
+    <div class="field">
+      <label for="hw">Accelerator</label>
+      <select id="hw">
+        <option value="h100" selected>H100 SXM</option>
+        <option value="h200">H200 SXM</option>
+        <option value="gh200">GH200</option>
+        <option value="b200">B200</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="prec">Precision</label>
+      <select id="prec">
+        <option value="bf16" selected>BF16</option>
+        <option value="fp8">FP8</option>
+      </select>
+    </div>
+    <div class="duo" style="margin-bottom:1rem">
+      <div class="field" style="margin:0">
+        <label for="mfu">MFU</label>
+        <input type="number" id="mfu" min="0.1" max="0.8" step="0.01" value="0.45">
+      </div>
+      <div class="field" style="margin:0">
+        <label for="usd">$ / GPU-hr</label>
+        <input type="number" id="usd" min="0.2" max="20" step="0.1" value="2.00">
+      </div>
+    </div>
+
+    <h2 class="mt">Billing</h2>
+    <label class="check"><input type="checkbox" id="qb" checked>
+      Question tokens bill as input</label>
+    <p class="hint" style="font-family:var(--mono);font-size:.62rem;color:var(--muted);margin:-.5rem 0 .6rem;line-height:1.45">
+      Uncheck if only the document counts. The price card says &ldquo;input tokens, output free&rdquo;
+      without saying which side the questions fall on.</p>
+
+    <button class="reset" id="reset">Reset</button>
+  </div>
+  </div>
+
+  <div>
+
+  <div class="verdict">
+    <div>
+      <div class="verdict-label">Gross margin</div>
+      <div class="verdict-num" id="o-ratio"></div>
+    </div>
+    <div>
+      <span class="pill" id="o-pill"></span>
+      <p class="verdict-say" id="o-say"></p>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="k">Revenue / call</span><span class="v" id="o-rev"></span></div>
+    <div class="stat"><span class="k">GPU cost / call</span><span class="v" id="o-cost"></span></div>
+    <div class="stat"><span class="k">FLOPs / call</span><span class="v" id="o-flops"></span></div>
+    <div class="stat"><span class="k">Attention share</span><span class="v" id="o-att"></span></div>
+  </div>
+
+  <h2 class="sec"><span class="n">01</span>The cost basis sets a ceiling on model size</h2>
+
+  <p class="note">A rented accelerator converts dollars into FLOPs at a fixed rate. Peak dense
+  throughput, derated by the fraction you actually achieve, divided into the hourly price:</p>
+
+  <div class="eq"><b>c_flop</b> = ($/GPU-hr ÷ 3600) ÷ (peak_FLOPS × MFU)</div>
+
+  <p class="note">At the default rig that is about <b>1.25e-18</b> dollars per FLOP. Revenue is
+  4.2e-8 dollars per input token. Divide and you get the compute budget a single token can pay
+  for: roughly <b>3.4e10 FLOPs</b>. A dense forward pass spends <code>2P</code> of those in the
+  weights, so at break-even <code>P = 1.7e10</code> — about <b>17B parameters</b>. FP8 roughly
+  doubles it.</p>
+
+  <p class="note">That is a ceiling at zero margin. A business wanting 80% gross margin on
+  inference has to fit in a fifth of it, which lands in the low single-digit billions. The price
+  card is not consistent with a 70B model under any rental price currently on the market; it is
+  very consistent with something small, which is exactly what you would build if you wanted one
+  parallel pass in under 500ms.</p>
+
+  <figure>
+    <div class="fig-head"><span class="n">Fig 1</span><span class="t">Margin vs parameter count</span></div>
+    <div class="plate"><svg id="f1" viewBox="0 0 740 300" role="img"
+      aria-label="Gross margin against parameter count, three hardware and precision combinations, with a break-even line."></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--teal)"></i>H100 BF16</span>
+      <span><i style="background:var(--spec)"></i>H100 FP8</span>
+      <span><i style="background:var(--decode)"></i>B200 FP8</span>
+      <span><i style="background:var(--brick)"></i>Break-even</span>
+    </div>
+    <figcaption>Model, not measurement. Swept at the current document length and question count;
+    the hollow marker is your panel setting. Curves use each combination's own list price, so
+    they also carry the rental market's pricing, not just silicon.</figcaption>
+  </figure>
+
+  <h2 class="sec"><span class="n">02</span>Attention is quadratic; the price is linear</h2>
+
+  <p class="note">The weights term is not the whole cost. Attention over a context of L tokens
+  contributes <code>4·L·d·n_layers</code> FLOPs per slot, so the cost of a document is:</p>
+
+  <div class="eq">FLOPs(doc) = <b>2·P·L</b> + <b>4·L²·d·n_layers</b><br>
+  Revenue(doc) = L × $4.2e-8</div>
+
+  <p class="note">Revenue has one power of L. Cost has two. There is therefore a document length
+  past which every additional token is sold below cost, and it does not depend on how the product
+  is marketed — only on shape:</p>
+
+  <div class="eq"><b>L*</b> = (price ÷ c_flop − 2P) ÷ (4 · d · n_layers)</div>
+
+  <p class="note">For the default 3B model on H100 BF16 that crossover sits near <b>87k
+  tokens</b>. FP8 pushes it to roughly 192k. Neither number is anywhere near the context lengths
+  a document-analysis product invites you to use. Send a 500k-token contract and the call loses
+  money by construction, no matter how many questions you ask or do not ask.</p>
+
+  <p class="note">Note what hardware does and does not fix. B200 buys roughly 2.3x the FLOPs at
+  roughly 2.5x the hourly rate, so at these list prices its dollars-per-FLOP is actually
+  <b>slightly worse</b> than an H100 — 6.9e-19 against 6.2e-19 at FP8. Newer silicon does not
+  move this wall. Precision does, and it is the only lever on the page that buys a full
+  doubling.</p>
+
+  <figure>
+    <div class="fig-head"><span class="n">Fig 2</span><span class="t">Margin vs document length</span></div>
+    <div class="plate"><svg id="f2" viewBox="0 0 740 300" role="img"
+      aria-label="Gross margin against document length in tokens, three hardware and precision combinations, with a break-even line."></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--teal)"></i>H100 BF16</span>
+      <span><i style="background:var(--spec)"></i>H100 FP8</span>
+      <span><i style="background:var(--decode)"></i>B200 FP8</span>
+      <span><i style="background:var(--brick)"></i>Break-even</span>
+    </div>
+    <figcaption>Model, not measurement. Swept at the current parameter count and question count.
+    The fall-off is the L² attention term overtaking the linear price; on a log-log axis a
+    quadratic cost against a linear price is a straight descent.</figcaption>
+  </figure>
+
+  <h2 class="sec"><span class="n">03</span>The question slots hinge on one undefined word</h2>
+
+  <p class="note">The obvious guess is that question slots are where the money leaks: Jev answers
+  N questions per document, output is free, so surely N is unpriced compute. Work it out and the
+  guess is wrong, in a way that turns out to be more interesting.</p>
+
+  <p class="note">At full depth a question slot is arithmetically <b>identical to a document
+  token</b>. It traverses the same stack, it attends over the same L positions, so it costs
+  <code>2P + 4·L·d·n_layers</code> — exactly what a document token costs. And if it bills as an
+  input token, it earns exactly what a document token earns. Cost and revenue scale together, so
+  the margin does not move at all:</p>
+
+  <div class="eq">margin = revenue ÷ cost = <b>price ÷ (perSlot × c_flop)</b><br>
+  &nbsp; — no N in it, at depth 1.0 with questions billed</div>
+
+  <p class="note">That is why the boundary in Fig 3 is a <b>vertical line</b> at the default
+  settings. Asking one question or ten thousand changes nothing. The whole exposure is in L, which
+  is section 02's problem, not a new one.</p>
+
+  <p class="note">The neutrality rests entirely on a word the price card never defines. It says
+  <i>input tokens, output free</i>. A typed question is neither, obviously: it is something you
+  send, that produces something you receive. If questions bill as input, N is free of consequence.
+  If they are treated as part of the decision output — free — then every question slot is pure
+  unpriced compute, and N tilts the boundary hard. <b>Untick the billing box in the panel:</b> an
+  8k-token document with 5,000 questions goes from a 3.9x margin to 0.65x, without changing
+  anything else.</p>
+
+  <p class="note">This is also where the amortization story has to pick a side. Jev's cost claim
+  needs many questions per document — that is what spreads the encode. But each question either
+  bills, in which case it is just input tokens and the &ldquo;output free&rdquo; framing is doing
+  no work at all; or it does not, in which case the cheapest workloads for a buyer are the ones
+  that lose the most money for the seller. There is no third option, and the price card does not
+  say which one it is.</p>
+
+  <figure>
+    <div class="fig-head"><span class="n">Fig 3</span><span class="t">Break-even surface over document length and question count</span></div>
+    <div class="plate"><svg id="f3" viewBox="0 0 740 320" role="img"
+      aria-label="Shaded contour of gross margin over document length and questions per document, with a break-even boundary."></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--good);height:10px;width:10px;border-radius:2px"></i>Above cost</span>
+      <span><i style="background:var(--brick);height:10px;width:10px;border-radius:2px"></i>Below cost</span>
+      <span><i style="background:var(--ink)"></i>Break-even boundary</span>
+    </div>
+    <figcaption>Model, not measurement. Shading is the margin ratio at the current parameter count
+    and rig; the boundary is where revenue equals GPU cost, and everything right of it is served
+    below cost. The hollow marker is your panel setting. At the defaults the boundary is vertical —
+    N does not move it. Untick <i>question tokens bill as input</i>, or drop the slot depth below
+    1.0, and it tilts.</figcaption>
+  </figure>
+
+  </div>
+</div>
+
+<h2 class="sec"><span class="n">04</span>Where this lands</h2>
+
+<p class="note">None of this says the price is wrong. Flat prices are a product decision, and a
+seed-stage lab pricing below cost to buy adoption is ordinary — the number on the card tells you
+what they want the workload to cost a buyer, not what the GPU does. What the arithmetic does say
+is narrower and more useful:</p>
+
+<p class="note"><b>The price bounds the model.</b> At $0.042 per million input tokens, a
+profitable Jev is small — low single-digit billions of parameters. That is consistent with the
+latency claim and inconsistent with "frontier-scale". It also means the comparison that matters
+is against a fine-tuned cross-encoder, not against a chat model doing classification.</p>
+
+<p class="note"><b>The price cannot survive long context.</b> A linear per-input-token price
+against a quadratic attention cost has a crossover, and for a model this size it arrives well
+before the context lengths document workloads use. Expect a length cap, length-tiered pricing, or
+a quiet repricing.</p>
+
+<p class="note"><b>One undefined word carries the rest.</b> Whether a typed question bills as an
+input token decides whether N is free of consequence or the whole exposure. The published card
+does not say. That is not a rounding error in a pricing page; it is the difference between a
+neutral axis and an unbounded one, and it is the first question worth asking them.</p>
+
+<p class="note">The practical read for a buyer is the inverse of all this. Jev's price is a
+genuine bargain on short documents with many questions — and that is also the regime where a
+self-hosted cross-encoder is cheapest to run yourself, because the encode you are amortizing is
+small either way. The place you would most want a hosted model to save you, long documents, is
+the place this price cannot survive. Price your own workload at both ends before you join the
+waitlist.</p>
+
+<h2 class="sec"><span class="n">05</span>Assumptions</h2>
+
+<table class="asm">
+  <thead><tr><th>Quantity</th><th>Value used</th><th>Why, and how wrong it could be</th></tr></thead>
+  <tbody>
+    <tr><td>Jev price</td><td>$0.042 / M input</td><td>Published on typesafe.ai, September 2026. Output stated free.</td></tr>
+    <tr><td>H100 SXM</td><td>989 / 1979 TF, $2.00/hr</td><td>Dense BF16 / FP8, no sparsity. Rental price varies 1.5–3 by provider and commitment.</td></tr>
+    <tr><td>H200 SXM</td><td>989 / 1979 TF, $2.50/hr</td><td>Same compute as H100, more HBM. Memory headroom does not change these FLOP sums.</td></tr>
+    <tr><td>GH200</td><td>989 / 1979 TF, $2.20/hr</td><td>Hopper GPU beside Grace. Priced as a superchip node.</td></tr>
+    <tr><td>B200</td><td>2250 / 4500 TF, $5.00/hr</td><td>Dense. Rental pricing is still thin and moves fast; this is the softest cell in the table.</td></tr>
+    <tr><td>MFU</td><td>0.45</td><td>Prefill is compute-bound and batches well, so this is achievable but optimistic at long context.</td></tr>
+    <tr><td>Model shape</td><td>P = 12·n·d², d/n = 128</td><td>Standard aspect ratio. Reproduces Llama-7B and -70B shapes to within a few percent.</td></tr>
+    <tr><td>Attention</td><td>4·L·d·n per slot</td><td>Full dense attention. Sliding-window, GQA on the KV side, or any sparsity pushes the wall right — this is the most consequential simplification here.</td></tr>
+    <tr><td>Question cost</td><td>depth × full slot</td><td>Jev's architecture is unpublished. Exposed as a knob for that reason; at depth 1.0 a question is a full token slot.</td></tr>
+    <tr><td>Excluded</td><td>—</td><td>KV cache reuse across calls, batching inefficiency, serving overhead, networking, storage, idle capacity, and any margin on hosting. The first helps them; the rest hurt.</td></tr>
+  </tbody>
+</table>
+
+<p class="note">Everything above is an analytical model built from published prices and public
+hardware specifications. No part of it is a measurement of Jev, which is in gated early access.
+Where a number could not be sourced it became a control in the panel rather than a hidden
+constant.</p>
+
+<a class="backlink" href="/">&#8592; All notes</a>
+
+</div>
+
+<footer><div class="frame">
+  Figures marked as models are analytical, not measurements; assumptions are stated in each caption.<br>
+  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a>
+</div></footer>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var PRICE=4.2e-8;                       // $ per input token
+var HW={
+  h100 :{bf16:989e12, fp8:1979e12, usd:2.00, name:"H100 BF16"},
+  h200 :{bf16:989e12, fp8:1979e12, usd:2.50, name:"H200"},
+  gh200:{bf16:989e12, fp8:1979e12, usd:2.20, name:"GH200"},
+  b200 :{bf16:2250e12,fp8:4500e12, usd:5.00, name:"B200 FP8"}
+};
+var DEFAULTS={p:9.48,l:4.505,n:2.301,q:8,dep:1,hw:"h100",prec:"bf16",mfu:0.45,usd:2.00,auto:true,qb:true};
+
+/* ---------- model ---------- */
+function shapeOf(P){
+  var d=Math.round(Math.cbrt(P/0.09375));
+  var n=Math.max(2,Math.round(d/128));
+  return {d:d,n:n,P:12*n*d*d};
+}
+// continuous variant: sweeps must not round d and n, or the curve staircases
+function shapeSmooth(P){
+  var d=Math.cbrt(P/0.09375);
+  return {d:d,n:d/128,P:P};
+}
+function cflop(hw,prec,mfu,usd){
+  return (usd/3600)/(HW[hw][prec]*mfu);
+}
+function evaluate(s){
+  var perSlot=2*s.P+4*s.L*s.d*s.n;                 // FLOPs for one token slot
+  var docF=s.L*perSlot;
+  var qTok=s.N*s.qlen;
+  var qF=s.depth*qTok*perSlot;
+  var flops=docF+qF;
+  var cost=flops*s.c;
+  var billed=s.L+(s.qbilled?qTok:0);
+  var rev=billed*PRICE;
+  var attF=4*s.L*s.d*s.n*(s.L+s.depth*qTok);
+  return {flops:flops,cost:cost,rev:rev,ratio:cost>0?rev/cost:0,attShare:flops>0?attF/flops:0};
+}
+function readPanel(){
+  var P=Math.pow(10,+$("p").value);
+  var auto=$("auto").checked, d, n;
+  if(auto){ var sh=shapeOf(P); d=sh.d; n=sh.n; P=sh.P; }
+  else { d=+$("dm").value; n=+$("nl").value; P=12*n*d*d; }
+  var hw=$("hw").value, prec=$("prec").value;
+  return {P:P,d:d,n:n,
+    L:Math.round(Math.pow(10,+$("l").value)),
+    N:Math.round(Math.pow(10,+$("n").value)),
+    qlen:+$("q").value, depth:+$("dep").value,
+    hw:hw, prec:prec, mfu:+$("mfu").value, usd:+$("usd").value,
+    c:cflop(hw,prec,+$("mfu").value,+$("usd").value),
+    qbilled:$("qb").checked};
+}
+
+/* ---------- formatting ---------- */
+function trim(v,dp){
+  var s=v.toFixed(dp);
+  return s.indexOf(".")<0?s:s.replace(/0+$/,"").replace(/\.$/,"");
+}
+function fmtP(P){
+  if(P>=1e9) return trim(P/1e9,P<1e10?2:1)+"B";
+  return trim(P/1e6,0)+"M";
+}
+function fmtTok(v){
+  if(v>=1e6) return trim(v/1e6,v<1e7?2:1)+"M";
+  if(v>=1e3) return trim(v/1e3,v<1e4?1:0)+"k";
+  return String(Math.round(v));
+}
+function fmtUSD(v){
+  if(v>=1)    return "$"+v.toFixed(2);
+  if(v>=1e-2) return "$"+v.toFixed(4);
+  if(v>=1e-5) return "$"+v.toFixed(6);
+  return "$"+v.toExponential(1);
+}
+function fmtFlops(v){
+  var u=["","K","M","G","T","P","E"],i=0;
+  while(v>=1000&&i<u.length-1){v/=1000;i++;}
+  return v.toFixed(v<10?2:v<100?1:0)+" "+u[i]+"FLOP";
+}
+function fmtRatio(r){
+  if(!isFinite(r)||r<=0) return "0";
+  if(r>=10)   return r.toFixed(0)+"x";
+  if(r>=1)    return r.toFixed(2)+"x";
+  return r.toFixed(2)+"x";
+}
+
+/* ---------- svg helpers ---------- */
+var GEO={w:740,h:300,l:58,r:20,t:16,b:38};
+function px(v,lo,hi,g){ return g.l+(Math.log10(v)-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*(g.w-g.l-g.r); }
+function py(v,lo,hi,g){
+  var c=Math.min(Math.max(v,lo),hi);
+  return (g.h-g.b)-(Math.log10(c)-Math.log10(lo))/(Math.log10(hi)-Math.log10(lo))*(g.h-g.b-g.t);
+}
+function decades(lo,hi){
+  var out=[],e=Math.ceil(Math.log10(lo));
+  for(;Math.pow(10,e)<=hi*1.0001;e++) out.push(Math.pow(10,e));
+  return out;
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+function frame(g,xs,xlab,ys,ylab,xtitle,ytitle){
+  var o="";
+  ys.forEach(function(t){
+    var y=py(t.v,ys.lo,ys.hi,g);
+    o+='<line class="d-rule" x1="'+g.l+'" y1="'+y.toFixed(1)+'" x2="'+(g.w-g.r)+'" y2="'+y.toFixed(1)+'"/>';
+    o+='<text class="d-sm" x="'+(g.l-8)+'" y="'+(y+3.5).toFixed(1)+'" text-anchor="end">'+esc(t.t)+'</text>';
+  });
+  xs.forEach(function(t){
+    var x=px(t.v,xs.lo,xs.hi,g);
+    o+='<line class="d-rule" x1="'+x.toFixed(1)+'" y1="'+g.t+'" x2="'+x.toFixed(1)+'" y2="'+(g.h-g.b)+'" opacity=".55"/>';
+    o+='<text class="d-sm" x="'+x.toFixed(1)+'" y="'+(g.h-g.b+15)+'" text-anchor="middle">'+esc(t.t)+'</text>';
+  });
+  o+='<text class="d-sm" x="'+((g.l+g.w-g.r)/2).toFixed(0)+'" y="'+(g.h-6)+'" text-anchor="middle">'+esc(xtitle)+'</text>';
+  o+='<text class="d-sm" transform="translate(13,'+((g.t+g.h-g.b)/2).toFixed(0)+') rotate(-90)" text-anchor="middle">'+esc(ytitle)+'</text>';
+  return o;
+}
+function marker(x,y,color){
+  return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="5" fill="var(--surface)" stroke="'+color+'" stroke-width="2.5"/>';
+}
+
+/* ---------- figures ---------- */
+var YLO=0.02,YHI=60;
+var YTICKS=[{v:0.02,t:"0.02x"},{v:0.1,t:"0.1x"},{v:1,t:"1x"},{v:10,t:"10x"},{v:60,t:"60x"}];
+var RIGS=[{hw:"h100",prec:"bf16",col:"var(--teal)",  lab:"H100 BF16"},
+          {hw:"h100",prec:"fp8", col:"var(--spec)",  lab:"H100 FP8"},
+          {hw:"b200",prec:"fp8", col:"var(--decode)",lab:"B200 FP8"}];
+
+function sweep(g,xlo,xhi,rig,s,build){
+  var pts=[],steps=150;
+  for(var i=0;i<=steps;i++){
+    var x=Math.pow(10,Math.log10(xlo)+(Math.log10(xhi)-Math.log10(xlo))*i/steps);
+    var st=build(x,rig);
+    var r=evaluate(st).ratio;
+    pts.push([px(x,xlo,xhi,g),py(r,YLO,YHI,g),r]);
+  }
+  return pts;
+}
+function polyline(pts,col){
+  return '<path class="d-line" stroke="'+col+'" d="M'+pts.map(function(p){
+    return p[0].toFixed(1)+" "+p[1].toFixed(1);}).join("L")+'"/>';
+}
+// Direct-label every series (secondary encoding, so identity is never colour-alone),
+// then push overlapping labels apart so three curves converging at the right edge
+// stay readable.
+function endLabels(series,g){
+  var cand=series.map(function(s){
+    var p=s.pts[s.pts.length-1];
+    for(var i=s.pts.length-1;i>=0;i--){
+      if(s.pts[i][2]>YLO*1.3&&s.pts[i][2]<YHI*0.85){ p=s.pts[i]; break; }
+    }
+    return {y:p[1]-7,col:s.col,lab:s.lab};
+  }).sort(function(a,b){return a.y-b.y;});
+
+  var GAP=13, lo=g.t+10, hi=g.h-g.b-4;
+  for(var i=1;i<cand.length;i++){
+    if(cand[i].y-cand[i-1].y<GAP) cand[i].y=cand[i-1].y+GAP;
+  }
+  var over=cand[cand.length-1].y-hi;
+  if(over>0) cand.forEach(function(c){ c.y-=over; });
+  cand.forEach(function(c){ c.y=Math.min(Math.max(c.y,lo),hi); });
+
+  return cand.map(function(c){
+    return '<text class="d-tag" fill="'+c.col+'" x="'+(g.w-g.r-3)+'" y="'+c.y.toFixed(1)+
+      '" text-anchor="end">'+esc(c.lab)+'</text>';
+  }).join("");
+}
+function breakEven(g,xlo,xhi){
+  var y=py(1,YLO,YHI,g);
+  return '<line x1="'+g.l+'" y1="'+y.toFixed(1)+'" x2="'+(g.w-g.r)+'" y2="'+y.toFixed(1)+
+    '" stroke="var(--brick)" stroke-width="1.5" stroke-dasharray="5 4"/>'+
+    '<text class="d-tag" fill="var(--brick)" x="'+(g.l+6)+'" y="'+(y-6).toFixed(1)+'">Break-even</text>';
+}
+
+function lineFig(el,s,lo,hi,fmtX,xtitle,curX,build){
+  var g=GEO,o="";
+  var xs=decades(lo,hi).map(function(v){return {v:v,t:fmtX(v)};}); xs.lo=lo; xs.hi=hi;
+  var ys=YTICKS.slice(); ys.lo=YLO; ys.hi=YHI;
+  o+=frame(g,xs,null,ys,null,xtitle,"Revenue ÷ GPU cost");
+  var series=RIGS.map(function(rig){
+    return {pts:sweep(g,lo,hi,rig,s,build),col:rig.col,lab:rig.lab};
+  });
+  series.forEach(function(sr){ o+=polyline(sr.pts,sr.col); });
+  o+=breakEven(g,lo,hi);
+  o+=endLabels(series,g);
+  var cur=evaluate(s);
+  o+=marker(px(Math.min(Math.max(curX,lo),hi),lo,hi,g),py(cur.ratio,YLO,YHI,g),"var(--ink)");
+  $(el).innerHTML=o;
+}
+
+function fig1(s){
+  lineFig("f1",s,3e8,2e11,fmtP,"Parameters",s.P,function(P,rg){
+    var sh=shapeSmooth(P);
+    return {P:sh.P,d:sh.d,n:sh.n,L:s.L,N:s.N,qlen:s.qlen,depth:s.depth,
+      c:cflop(rg.hw,rg.prec,s.mfu,HW[rg.hw].usd),qbilled:s.qbilled};
+  });
+}
+
+function fig2(s){
+  lineFig("f2",s,1e3,2e6,fmtTok,"Document tokens",s.L,function(L,rg){
+    return {P:s.P,d:s.d,n:s.n,L:L,N:s.N,qlen:s.qlen,depth:s.depth,
+      c:cflop(rg.hw,rg.prec,s.mfu,HW[rg.hw].usd),qbilled:s.qbilled};
+  });
+}
+
+function fig3(s){
+  var g={w:740,h:320,l:58,r:20,t:16,b:38};
+  var xlo=1e3,xhi=2e6,ylo=1,yhi=1e4,o="";
+  var cols=60,rows=30;
+  var cw=(g.w-g.l-g.r)/cols, ch=(g.h-g.t-g.b)/rows;
+  function at(L,N){
+    return evaluate({P:s.P,d:s.d,n:s.n,L:L,N:N,qlen:s.qlen,depth:s.depth,c:s.c,qbilled:s.qbilled}).ratio;
+  }
+  // shaded field
+  for(var i=0;i<cols;i++){
+    var L=Math.pow(10,Math.log10(xlo)+(Math.log10(xhi)-Math.log10(xlo))*(i+0.5)/cols);
+    for(var j=0;j<rows;j++){
+      var N=Math.pow(10,Math.log10(ylo)+(Math.log10(yhi)-Math.log10(ylo))*(j+0.5)/rows);
+      var r=at(L,N), a, col;
+      if(r>=1){ col="var(--good)"; a=Math.min(0.30,0.05+0.11*Math.log10(r)); }
+      else    { col="var(--brick)"; a=Math.min(0.42,0.08+0.17*Math.log10(1/r)); }
+      // crispEdges with no overlap: overlapping translucent tiles would double up
+      // and draw a visible mesh across the field
+      o+='<rect shape-rendering="crispEdges" x="'+(g.l+i*cw).toFixed(2)+
+         '" y="'+(g.h-g.b-(j+1)*ch).toFixed(2)+
+         '" width="'+cw.toFixed(2)+'" height="'+ch.toFixed(2)+
+         '" fill="'+col+'" opacity="'+a.toFixed(3)+'"/>';
+    }
+  }
+  // break-even boundary. Margin falls monotonically in L at fixed N, so bisect along L
+  // for each row: that finds the crossing in both regimes, including the degenerate one
+  // where margin is independent of N and the boundary is a vertical line.
+  var seg=[],run=[];
+  for(var j2=0;j2<=120;j2++){
+    var Ny=Math.pow(10,Math.log10(ylo)+(Math.log10(yhi)-Math.log10(ylo))*j2/120);
+    var a=xlo,b=xhi;
+    if((at(a,Ny)-1)*(at(b,Ny)-1)>0){ if(run.length>1)seg.push(run); run=[]; continue; }
+    for(var k=0;k<44;k++){
+      var m=Math.sqrt(a*b);
+      if(at(m,Ny)>=1){ a=m; } else { b=m; }
+    }
+    run.push([px(Math.sqrt(a*b),xlo,xhi,g),py(Ny,ylo,yhi,g)]);
+  }
+  if(run.length>1)seg.push(run);
+  seg.forEach(function(sg){
+    o+='<path fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" d="M'+
+      sg.map(function(p){return p[0].toFixed(1)+" "+p[1].toFixed(1);}).join("L")+'"/>';
+  });
+  // axes on top of the field
+  var xs=decades(xlo,xhi).map(function(v){return {v:v,t:fmtTok(v)};}); xs.lo=xlo; xs.hi=xhi;
+  var ys=decades(ylo,yhi).map(function(v){return {v:v,t:fmtTok(v)};}); ys.lo=ylo; ys.hi=yhi;
+  o+=frame(g,xs,null,ys,null,"Document tokens","Questions per document");
+  if(seg.length){
+    var top=seg[seg.length-1], tip=top[top.length-1];
+    o+='<text class="d-tag" fill="var(--ink)" x="'+Math.min(tip[0]+8,g.w-g.r-92).toFixed(1)+
+       '" y="'+Math.max(tip[1]+13,g.t+13).toFixed(1)+'">Break-even</text>';
+  }
+  var cur=evaluate(s);
+  o+=marker(px(Math.min(Math.max(s.L,xlo),xhi),xlo,xhi,g),
+            py(Math.min(Math.max(s.N,ylo),yhi),ylo,yhi,g),"var(--ink)");
+  o+='<text class="d-tag" fill="'+(cur.ratio>=1?"var(--good)":"var(--brick)")+'" x="'+
+     (g.w-g.r-4)+'" y="'+(g.t+12)+'" text-anchor="end">You: '+fmtRatio(cur.ratio)+'</text>';
+  $("f3").innerHTML=o;
+}
+
+/* ---------- render ---------- */
+function render(){
+  var s=readPanel(), r=evaluate(s);
+
+  $("o-p").textContent=fmtP(s.P);
+  $("o-l").textContent=fmtTok(s.L);
+  $("o-n").textContent=fmtTok(s.N);
+  $("o-q").textContent=s.qlen;
+  $("o-dep").textContent=s.depth.toFixed(2);
+  $("o-shape").innerHTML="d_model <b>"+s.d+"</b> &middot; layers <b>"+s.n+"</b> &middot; "+
+    "c_flop <b>"+s.c.toExponential(2)+"</b> $/FLOP";
+
+  if($("auto").checked){ $("dm").value=s.d; $("nl").value=s.n; }
+  $("dm").disabled=$("auto").checked; $("nl").disabled=$("auto").checked;
+
+  $("o-rev").textContent=fmtUSD(r.rev);
+  $("o-cost").textContent=fmtUSD(r.cost);
+  $("o-flops").textContent=fmtFlops(r.flops);
+  $("o-att").textContent=(r.attShare*100).toFixed(0)+"%";
+
+  var ratio=r.ratio, cls, pill, say;
+  if(ratio>=2){        cls="t-good";  pill=["yes","Above cost"];
+    say="Revenue covers GPU cost <b>"+fmtRatio(ratio)+"</b> over. There is room here for serving overhead and margin."; }
+  else if(ratio>=1){   cls="t-spec";  pill=["maybe","Thin"];
+    say="Revenue covers raw GPU cost by <b>"+fmtRatio(ratio)+"</b>, which does not survive serving overhead, idle capacity, or a rental price above "+fmtUSD(s.usd)+" an hour."; }
+  else {               cls="t-brick"; pill=["no","Below cost"];
+    say="This call burns <b>"+fmtUSD(r.cost-r.rev)+"</b> more compute than it bills. At these settings the price card is a subsidy."; }
+  $("o-ratio").textContent=fmtRatio(ratio);
+  $("o-ratio").className="verdict-num "+cls;
+  $("o-pill").textContent=pill[1];
+  $("o-pill").className="pill "+pill[0];
+  $("o-say").innerHTML=say;
+
+  fig1(s); fig2(s); fig3(s);
+}
+
+["p","l","n","q","dep","hw","prec","mfu","usd","auto","qb","dm","nl"].forEach(function(id){
+  $(id).addEventListener("input",render);
+  $(id).addEventListener("change",render);
+});
+$("reset").addEventListener("click",function(){
+  $("p").value=DEFAULTS.p; $("l").value=DEFAULTS.l; $("n").value=DEFAULTS.n;
+  $("q").value=DEFAULTS.q; $("dep").value=DEFAULTS.dep; $("hw").value=DEFAULTS.hw;
+  $("prec").value=DEFAULTS.prec; $("mfu").value=DEFAULTS.mfu; $("usd").value=DEFAULTS.usd;
+  $("auto").checked=DEFAULTS.auto; $("qb").checked=DEFAULTS.qb;
+  render();
+});
+$("hw").addEventListener("change",function(){ $("usd").value=HW[$("hw").value].usd.toFixed(2); render(); });
+
+render();
+})();
+</script>
+</body>
+</html>
