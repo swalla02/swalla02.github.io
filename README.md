@@ -3,6 +3,7 @@
 Static site, no build step. Every page is self-contained HTML.
 
 - `/` landing
+- `/jev-economics/` What the Price Card Implies
 - `/speculation-ceiling/` The Speculation Ceiling
 - `/speculative-decoding/` Speculative Decoding
 - `/does-speculation-pay/` Does Speculation Pay?
