@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Speculation Ceiling</title>
-<meta name="description" content="Speculative programmatic tool calling contains two techniques, one capped at 2x and one not. Read the argument, then put your own token rate and tool latency in and see whether either is worth building.">
+<meta name="description" content="Speculative programmatic tool calling is capped at 2x, and the parallel-dispatch half of the idea is worth more than the streaming half.">
 <link rel="canonical" href="https://swalla02.github.io/speculation-ceiling/">
 <link rel="icon" href="/assets/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
@@ -14,7 +14,7 @@
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="Harness Design Notes">
 <meta property="og:title" content="The Speculation Ceiling">
-<meta property="og:description" content="Speculative programmatic tool calling contains two techniques, one capped at 2x and one not. Read the argument, then put your own numbers in and see whether either is worth building.">
+<meta property="og:description" content="Speculative programmatic tool calling is capped at 2x, and the parallel-dispatch half of the idea is worth more than the streaming half.">
 <meta property="og:url" content="https://swalla02.github.io/speculation-ceiling/">
 <meta property="og:image" content="https://swalla02.github.io/assets/og-ceiling.png">
 <meta property="og:image:width" content="1200">
@@ -22,7 +22,7 @@
 <meta property="og:image:alt" content="The Speculation Ceiling">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="The Speculation Ceiling">
-<meta name="twitter:description" content="Speculative programmatic tool calling contains two techniques, one capped at 2x and one not. Read the argument, then put your own numbers in and see whether either is worth building.">
+<meta name="twitter:description" content="Speculative programmatic tool calling is capped at 2x, and the parallel-dispatch half of the idea is worth more than the streaming half.">
 <meta name="twitter:image" content="https://swalla02.github.io/assets/og-ceiling.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -249,110 +249,7 @@ footer a{color:var(--teal);}
 .backlink{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--mono);
   font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;}
 .backlink:hover{text-decoration:underline;}
-
-/* ---------- decision dashboard (merged from /does-speculation-pay/) ---------- */
-.dash{background:var(--surface);border:1px solid var(--rule);border-radius:2px;
-  padding:1.5rem 1.5rem 1.2rem;margin:2.6rem 0;}
-.dash-title{font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--muted);margin:0 0 .3rem;}
-.dash-kick{font-size:.95rem;color:var(--ink-soft);margin:0 0 1.4rem;max-width:62ch;}
-.dash-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:1.6rem 2rem;}
-@media (max-width:820px){.dash-cols{grid-template-columns:repeat(2,1fr);}}
-@media (max-width:560px){.dash-cols{grid-template-columns:1fr;}}
-.dash-col h3{font-family:var(--mono);font-size:.66rem;font-weight:600;letter-spacing:.13em;
-  text-transform:uppercase;color:var(--teal);margin:0 0 1rem;}
-.field{margin-bottom:1.1rem;}
-.field label{display:flex;justify-content:space-between;align-items:baseline;gap:.6rem;
-  font-family:var(--mono);font-size:.7rem;font-weight:500;color:var(--ink-soft);margin-bottom:.4rem;}
-.field .val{color:var(--teal);font-weight:600;font-variant-numeric:tabular-nums;}
-.field .hint{display:block;font-family:var(--mono);font-size:.62rem;color:var(--muted);
-  margin-top:.3rem;line-height:1.45;}
-input[type=range]{width:100%;accent-color:var(--teal);height:1.2rem;background:transparent;cursor:pointer;}
-.reset{font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;
-  background:none;border:1px solid var(--rule);color:var(--muted);padding:.45rem .8rem;
-  border-radius:2px;cursor:pointer;margin-top:.3rem;}
-.reset:hover{color:var(--ink);border-color:var(--muted);}
-
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;
-  background:var(--rule);border:1px solid var(--rule);border-radius:2px;overflow:hidden;margin:1.6rem 0 0;}
-.stat{background:var(--surface);padding:.85rem .9rem;}
-.stat .k{font-family:var(--mono);font-size:.6rem;letter-spacing:.11em;text-transform:uppercase;
-  color:var(--muted);display:block;margin-bottom:.3rem;}
-.stat .v{font-family:var(--display);font-weight:600;font-size:1.35rem;letter-spacing:-.02em;
-  font-variant-numeric:tabular-nums;}
-.stat .u{font-family:var(--mono);font-size:.68rem;color:var(--muted);margin-left:.15rem;}
-
-.verdict{background:var(--surface);border:1px solid var(--rule);border-radius:2px;
-  padding:1.5rem 1.6rem;margin:2.6rem 0 0;display:grid;grid-template-columns:auto 1fr;
-  gap:1.8rem;align-items:center;}
-@media (max-width:640px){.verdict{grid-template-columns:1fr;gap:1rem;}}
-.verdict-label{font-family:var(--mono);font-size:.68rem;letter-spacing:.13em;text-transform:uppercase;
-  color:var(--muted);margin-bottom:.5rem;}
-.verdict-num{font-family:var(--display);font-weight:700;font-size:3.6rem;line-height:.9;
-  letter-spacing:-.04em;font-variant-numeric:tabular-nums;}
-.verdict-say{font-size:1.04rem;line-height:1.5;margin:0;color:var(--ink-soft);}
-.verdict-say b{color:var(--ink);font-weight:600;}
-.pill{display:inline-block;font-family:var(--mono);font-size:.64rem;font-weight:600;
-  letter-spacing:.11em;text-transform:uppercase;padding:.28rem .6rem;border-radius:2px;margin-bottom:.6rem;}
-.pill.yes{background:var(--good-wash,#1F735016);color:var(--good,#1F7350);}
-.pill.maybe{background:var(--spec-wash,#C2711A20);color:var(--spec);}
-.pill.no{background:var(--brick-wash,#A24A3818);color:var(--brick,#A24A38);}
-.t-teal{color:var(--teal);} .t-spec{color:var(--spec);}
-.backdash{font-family:var(--mono);font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--teal);text-decoration:none;margin-left:auto;}
-/* the live figures come from the calculator and use .n / .t inside .fig-head */
-.fig-head .n{color:var(--spec);font-weight:600;}
-.fig-head .t{color:var(--muted);font-weight:500;}
-
-/* ---------- sticky dashboard: keeps the controls with the plots (#8) ---------- */
-.interactive{position:relative;}
-.dash-sentinel{position:absolute;top:0;left:0;width:1px;height:1px;}
-.dash{position:static;z-index:30;transition:padding .12s ease;}
-.can-pin .dash{position:sticky;top:0;}
-.pin-mirror{display:none;}
-
-.dash.pinned{
-  display:flex;align-items:flex-end;gap:1rem;
-  padding:.7rem .9rem .75rem;margin:2.6rem 0;
-  border-radius:0 0 2px 2px;
-  box-shadow:0 10px 22px -16px rgba(0,0,0,.55);
-}
-.dash.pinned .dash-title,
-.dash.pinned .dash-kick,
-.dash.pinned .dash-col h3,
-.dash.pinned .field .hint,
-.dash.pinned .stats,
-.dash.pinned .reset,
-.dash.pinned .field:not(.key){display:none;}
-.dash.pinned .dash-cols{display:flex;gap:.8rem;align-items:flex-end;flex:1;min-width:0;margin:0;}
-.dash.pinned .dash-col{display:contents;}
-.dash.pinned .field{flex:1 1 0;min-width:0;margin-bottom:0;}
-.dash.pinned .field label{font-size:.58rem;margin-bottom:.1rem;gap:.3rem;}
-.dash.pinned .field label .val{font-size:.62rem;}
-.dash.pinned input[type=range]{height:1rem;}
-.dash.pinned .pin-mirror{
-  display:flex;flex-direction:column;align-items:flex-end;flex:0 0 auto;
-  padding-left:.9rem;border-left:1px solid var(--rule);
-}
-.pin-k{font-family:var(--mono);font-size:.55rem;letter-spacing:.11em;text-transform:uppercase;
-  color:var(--muted);margin-bottom:.1rem;white-space:nowrap;}
-.pin-v{font-family:var(--display);font-weight:700;font-size:1.45rem;line-height:1;
-  letter-spacing:-.03em;font-variant-numeric:tabular-nums;color:var(--teal);}
-.pin-v.no{color:var(--brick,#A24A38);} .pin-v.maybe{color:var(--spec);} .pin-v.yes{color:var(--good,#1F7350);}
-
-/* a pinned bar costs more than it returns on a small viewport */
-@media (max-width:700px){
-  .dash,.can-pin .dash{position:static;}
-  .dash.pinned{display:block;padding:1.5rem 1.5rem 1.2rem;box-shadow:none;}
-  .dash.pinned .dash-title,.dash.pinned .dash-kick,.dash.pinned .dash-col h3,
-  .dash.pinned .field .hint,.dash.pinned .stats,.dash.pinned .reset,
-  .dash.pinned .field:not(.key){display:revert;}
-  .dash.pinned .dash-cols{display:grid;grid-template-columns:1fr;}
-  .dash.pinned .dash-col{display:block;}
-  .dash.pinned .pin-mirror{display:none;}
-}
-@media (prefers-reduced-motion:reduce){.dash{transition:none;}}
-
+.handoff{border-top:1px solid var(--rule);padding-top:1.3rem;margin-top:2.4rem;color:var(--ink-soft);}
 </style>
 </head>
 <body>
@@ -364,11 +261,11 @@ input[type=range]{width:100%;accent-color:var(--teal);height:1.2rem;background:t
     <span class="tickstrip" aria-hidden="true"><i class="a"></i><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></span>
   </div>
 </header>
-<div class="frame" style="padding-top:1.1rem"><a class="backlink" href="/" style="color:var(--teal)">&#8592; All notes</a></div>
+<div class="frame" style="padding-top:1.1rem"><a class="backlink" href="/" style="color:var(--teal)">&#8592; All notes</a><a class="backlink" href="/does-speculation-pay/" style="color:var(--teal);margin-left:1.4rem">Part 2: Does speculation pay? &#8594;</a></div>
 
 <div class="hero">
   <div class="frame"><div class="col">
-    <p class="eyebrow">Latency · code-as-action harnesses</p>
+    <p class="eyebrow">Speculative tool calling &middot; Part 1 of 2</p>
     <h1>The Speculation Ceiling</h1>
     <p class="standfirst">Speculative programmatic tool calling contains two techniques. One is capped at 2× and needs a streaming parser, a shadow interpreter, and a purity allowlist. The other has no cap and needs none of that. Most teams will build the first one.</p>
     <p class="byline">
@@ -382,95 +279,80 @@ input[type=range]{width:100%;accent-color:var(--teal);height:1.2rem;background:t
 
 <p class="lede">Alex Zhang's post proposes a clean idea. In a harness where the model writes code and the code calls tools, you don't have to wait for generation to finish before running anything. Parse the partial program as it streams, pre-launch the calls whose arguments you already know, and let the real execution collect cached results when it arrives. He calls it speculative programmatic tool calling, and he measures it at 1&ndash;1.2× on a Recursive Language Model over OOLONG.</p>
 
-<p>He's upfront that the number is modest. It isn't a disappointment. It's a number you could have predicted from two measurements you already have. And once you can predict it, something more useful falls out: the post bundles two distinct techniques under one name, with very different ceilings and very different implementation costs. They are not additive, and the cheap one is worth more. Set the panel below to your own workload and the gap between them stops being an argument and becomes a number.</p>
+<p>He's upfront that the number is modest. It isn't a disappointment. It's a number you could have predicted from two measurements you already have. And once you can predict it, something more useful falls out: the post bundles two distinct techniques under one name, with very different ceilings and very different implementation costs. They are not additive, and the cheap one is worth more.</p>
 
 <h2><span class="claim">Where the wall clock actually goes</span>A turn is two phases, and only one of them is being optimized</h2>
 
-<p>A turn is decode (the model writing the program, call it <code>D</code>), then execute, the program running its tool calls, <code>E</code>. Baseline wall clock is <code>D + E</code>. The calls inside <code>E</code> are usually sub-LLM or sub-agent invocations, so <code>E</code> is dominated by network-bound work that could have started earlier. There are several ways to arrange the same calls, and which one you pick matters more than which technique you name.</p>
+<p>A turn is decode (the model writing the program, call it <code>D</code>), then execute, the program running its tool calls, <code>E</code>. Baseline wall clock is <code>D + E</code>. The calls inside <code>E</code> are usually sub-LLM or sub-agent invocations, so <code>E</code> is dominated by network-bound work that could have started earlier. There are three ways to arrange the same six calls.</p>
 
-<div class="interactive">
-<div class="dash-sentinel" aria-hidden="true"></div>
-<div class="dash wide" id="dash">
-  <p class="dash-title">Your numbers</p>
-  <p class="dash-kick">Two of these you already have: your single-stream token rate and your backend's
-  p50 tool latency. The rest you can recover by parsing logged cells. Everything from here on &mdash;
-  Fig 1, Fig 3 and Fig 5 &mdash; is computed from what you set here.</p>
-  <div class="dash-cols">
-    <div class="dash-col">
-      <h3>Turn shape</h3>
-        <div class="field">
-          <label for="tps">Decode rate <span class="val"><span id="o-tps"></span> tok/s</span></label>
-          <input type="range" id="tps" min="5" max="300" step="5" value="60">
-          <span class="hint">Single-stream output rate for the model writing the program.</span>
-        </div>
-        <div class="field key">
-          <label for="tok">Tokens per turn <span class="val" id="o-tok"></span></label>
-          <input type="range" id="tok" min="100" max="4000" step="50" value="900">
-          <span class="hint">Thinking plus the program it emits, per turn.</span>
-        </div>
-        <div class="field">
-          <label for="n">Tool calls per turn <span class="val" id="o-n"></span></label>
-          <input type="range" id="n" min="1" max="24" step="1" value="6">
-        </div>
-        <div class="field key">
-          <label for="lat">Tool latency p50 <span class="val"><span id="o-lat"></span> ms</span></label>
-          <input type="range" id="lat" min="50" max="8000" step="50" value="1400">
-          <span class="hint">One call, measured at your backend.</span>
-        </div>
-    </div>
-    <div class="dash-col">
-      <h3>Program shape</h3>
-        <div class="field key">
-          <label for="w">Parallelism width <span class="val" id="o-w"></span></label>
-          <input type="range" id="w" min="1" max="12" step="1" value="4">
-          <span class="hint">How many of those calls are independent of each other. 1 = a strict chain.</span>
-        </div>
-        <div class="field key">
-          <label for="h">Speculatable share <span class="val"><span id="o-h"></span>%</span></label>
-          <input type="range" id="h" min="0" max="100" step="5" value="60">
-          <span class="hint">Share whose arguments resolve without touching I/O. Recoverable by parsing logged programs.</span>
-        </div>
-        <div class="field">
-          <label for="waste">Wasted speculation <span class="val"><span id="o-waste"></span>%</span></label>
-          <input type="range" id="waste" min="0" max="80" step="5" value="25">
-          <span class="hint">Share of speculated calls launched but never used: branch not taken, cell errored, program rewritten. Costs backend capacity, returns nothing.</span>
-        </div>
-    </div>
-    <div class="dash-col">
-      <h3>Scale</h3>
-        <div class="field key">
-          <label for="cc">Concurrent turns <span class="val" id="o-cc"></span></label>
-          <input type="range" id="cc" min="1" max="64" step="1" value="4">
-        </div>
-        <div class="field">
-          <label for="cap">Backend capacity <span class="val" id="o-cap"></span></label>
-          <input type="range" id="cap" min="2" max="256" step="2" value="32">
-          <span class="hint">Max tool calls your backend serves at once before latency starts rising.</span>
-        </div>
-      <button class="reset" id="reset">Reset to defaults</button>
-    </div>
-  </div>
-      <div class="stats">
-        <div class="stat"><span class="k">Decode D</span><span class="v" id="s-d"></span><span class="u">s</span></div>
-        <div class="stat"><span class="k">Tool time E</span><span class="v" id="s-e"></span><span class="u">s</span></div>
-        <div class="stat"><span class="k">E / D</span><span class="v" id="s-r"></span></div>
-        <div class="stat"><span class="k">Turn now</span><span class="v" id="s-base"></span><span class="u">s</span></div>
-        <div class="stat"><span class="k">Turn best</span><span class="v t-teal" id="s-best"></span><span class="u">s</span></div>
-        <div class="stat"><span class="k">Wasted calls</span><span class="v t-spec" id="s-waste"></span><span class="u">/turn</span></div>
-      </div>
-  <div class="pin-mirror">
-    <span class="pin-k">Best achievable</span>
-    <span class="pin-v" id="pin-num">&ndash;</span>
-  </div>
-</div>
-  <div class="verdict" id="verdict">
-    <div><div class="verdict-label">Best achievable</div><div class="verdict-num t-teal" id="v-num">&ndash;</div></div>
-    <div><span class="pill maybe" id="v-pill">&hellip;</span><p class="verdict-say" id="v-say"></p></div>
-  </div>
 <figure class="wide">
-  <div class="fig-head"><span class="fig-num">Fig 1</span><span class="fig-name">Where your turn goes</span></div>
-  <div class="plate"><svg id="bars" viewBox="0 0 720 236" role="img" aria-label="Timeline comparison of your turn under four scheduling strategies: baseline, parallel dispatch, streaming speculation, and both."></svg></div>
-  <figcaption id="cap-a"></figcaption>
+  <div class="fig-head"><span class="fig-num">Fig 1</span><span class="fig-name">Three arrangements of one turn</span></div>
+  <div class="plate">
+  <svg viewBox="0 0 800 322" role="img" aria-label="Three timelines of the same turn: sequential execution ends at 590 time units, parallel dispatch at 315, and speculated dispatch at 295, showing that parallelising the calls captures most of the available saving before streaming speculation adds anything.">
+    <defs>
+      <marker id="f1h" viewBox="0 0 9 7" refX="8.5" refY="3.5" markerWidth="7" markerHeight="6" orient="auto"><path class="d-head" d="M0,0 L9,3.5 L0,7 z"/></marker>
+    </defs>
+
+    <!-- legend -->
+    <g>
+      <rect x="24" y="14" width="26" height="9" rx="1.5" class="bar-decode"/>
+      <text x="57" y="22.5" class="d-tag">DECODE</text>
+      <rect x="126" y="14" width="26" height="9" rx="1.5" class="bar-exec"/>
+      <text x="159" y="22.5" class="d-tag">TOOL CALL, AFTER DECODE</text>
+      <rect x="330" y="14" width="26" height="9" rx="1.5" class="bar-spec"/>
+      <text x="363" y="22.5" class="d-tag">TOOL CALL, SPECULATED DURING DECODE</text>
+    </g>
+
+    <!-- ROW 1 : sequential -->
+    <text x="112" y="66" text-anchor="end" class="d-lbl">sequential</text>
+    <text x="112" y="80" text-anchor="end" class="d-lbl-sm">D + &#8721;Ei</text>
+    <rect x="128" y="52" width="260" height="26" rx="2" class="bar-decode"/>
+    <rect x="388" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="443" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="498" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="553" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="608" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <rect x="663" y="52" width="52" height="26" rx="2" class="bar-exec"/>
+    <line x1="718" y1="44" x2="718" y2="250" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="726" y="68" class="d-lbl-sm">590</text>
+
+    <!-- ROW 2 : parallel dispatch -->
+    <text x="112" y="140" text-anchor="end" class="d-lbl">parallel dispatch</text>
+    <text x="112" y="154" text-anchor="end" class="d-lbl-sm">D + max Ei</text>
+    <rect x="128" y="126" width="260" height="26" rx="2" class="bar-decode"/>
+    <rect x="388" y="126.0" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="130.5" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="135.0" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="139.5" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="144.0" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <rect x="388" y="148.5" width="52" height="3.4" rx="1" class="bar-exec"/>
+    <line x1="443" y1="118" x2="443" y2="250" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="451" y="142" class="d-lbl-sm">315</text>
+
+    <!-- ROW 3 : speculated -->
+    <text x="112" y="214" text-anchor="end" class="d-lbl">speculated</text>
+    <text x="112" y="228" text-anchor="end" class="d-lbl-sm">max(D, last call)</text>
+    <rect x="128" y="200" width="260" height="26" rx="2" class="bar-decode"/>
+    <rect x="176" y="200.0" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="204" y="204.5" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="232" y="209.0" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="260" y="213.5" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="288" y="218.0" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <rect x="316" y="222.5" width="52" height="3.4" rx="1" class="bar-spec"/>
+    <line x1="388" y1="192" x2="388" y2="250" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="396" y="216" class="d-lbl-sm">295</text>
+
+    <!-- saving brackets -->
+    <line x1="443" y1="266" x2="718" y2="266" class="d-line" marker-end="url(#f1h)"/>
+    <line x1="443" y1="262" x2="443" y2="270" class="d-line"/>
+    <text x="580" y="282" text-anchor="middle" class="d-tag t-teal">PARALLEL DISPATCH SAVES 275</text>
+    <line x1="388" y1="298" x2="443" y2="298" class="d-line"/>
+    <line x1="388" y1="294" x2="388" y2="302" class="d-line"/>
+    <line x1="443" y1="294" x2="443" y2="302" class="d-line"/>
+    <text x="455" y="302" class="d-tag t-spec">SPECULATION ADDS 20 MORE</text>
+  </svg>
+  </div>
+  <figcaption><b>The same six independent sub-LLM calls, three schedules.</b> Running them concurrently after decode collapses <code>&#8721;Ei</code> to <code>max Ei</code> and captures 275 of the 295 units available. Launching them <em>during</em> decode, the streaming half of sPTC, recovers the remaining 20. Numbers are illustrative, but the ordering is structural, not a quirk of these values.</figcaption>
 </figure>
 
 <p>That second bracket is the whole argument. Once the calls run concurrently, there is very little left for streaming speculation to win, because the thing it hides is already hidden. The two techniques compete for the same savings, and whichever you implement first collects most of it.</p>
@@ -599,11 +481,76 @@ b = llm_query(<span class="ok">"Use: "</span> + notes)  <span class="no"># block
 <p>Perfect speculation, infinite engineering, zero overhead: you cannot beat 2×, and you only reach 2× when decode time and execution time are exactly equal. Plot it against <code>E/D</code> and you get a tent.</p>
 
 <figure class="wide">
-  <div class="fig-head"><span class="fig-num">Fig 3</span><span class="fig-name">Speedup ceiling vs. the decode-to-execute ratio</span><a class="backdash" href="#dash">&#8593; your numbers</a></div>
-  <div class="plate"><svg id="tent" viewBox="0 0 720 300" role="img" aria-label="Your workload located on the streaming-overlap speedup curve, which peaks at 2x where decode and execute time are equal."></svg></div>
-  <figcaption id="cap-b"></figcaption>
+  <div class="fig-head"><span class="fig-num">Fig 3</span><span class="fig-name">Speedup ceiling vs. the decode-to-execute ratio</span></div>
+  <div class="plate">
+  <svg viewBox="0 0 800 384" role="img" aria-label="Speedup from streaming speculation plotted against the ratio of execution time to decode time, on a log axis from 0.1 to 10. Every curve peaks at 2x where the ratio is 1 and falls away symmetrically. At a ratio of 0.2 with a perfect hit rate the ceiling is 1.2x, matching the measured result.">
+    <defs>
+    </defs>
+
+    <!-- measured band -->
+    <rect x="92" y="273.7" width="634" height="48.3" class="wash-teal"/>
+    <text x="718" y="291" text-anchor="end" class="d-tag t-teal">MEASURED BAND, ZHANG 2026: 1.0&ndash;1.2&times;</text>
+
+    <!-- gridlines -->
+    <line x1="92" y1="322" x2="726" y2="322" class="d-rule"/>
+    <line x1="92" y1="261.6" x2="726" y2="261.6" class="d-grid"/>
+    <line x1="92" y1="201.1" x2="726" y2="201.1" class="d-grid"/>
+    <line x1="92" y1="140.7" x2="726" y2="140.7" class="d-grid"/>
+    <line x1="92" y1="80.3" x2="726" y2="80.3" class="d-grid"/>
+    <line x1="92" y1="44" x2="92" y2="322" class="d-rule"/>
+
+    <text x="84" y="326" text-anchor="end" class="d-lbl-sm">1.0&times;</text>
+    <text x="84" y="265" text-anchor="end" class="d-lbl-sm">1.25&times;</text>
+    <text x="84" y="205" text-anchor="end" class="d-lbl-sm">1.5&times;</text>
+    <text x="84" y="144" text-anchor="end" class="d-lbl-sm">1.75&times;</text>
+    <text x="84" y="84" text-anchor="end" class="d-lbl-sm">2.0&times;</text>
+
+    <!-- x ticks -->
+    <line x1="92" y1="322" x2="92" y2="327" class="d-rule"/>
+    <line x1="187.4" y1="322" x2="187.4" y2="327" class="d-rule"/>
+    <line x1="313.6" y1="322" x2="313.6" y2="327" class="d-rule"/>
+    <line x1="409" y1="322" x2="409" y2="327" class="d-rule"/>
+    <line x1="504.4" y1="322" x2="504.4" y2="327" class="d-rule"/>
+    <line x1="630.6" y1="322" x2="630.6" y2="327" class="d-rule"/>
+    <line x1="726" y1="322" x2="726" y2="327" class="d-rule"/>
+    <text x="92" y="342" text-anchor="middle" class="d-lbl-sm">0.1</text>
+    <text x="187.4" y="342" text-anchor="middle" class="d-lbl-sm">0.2</text>
+    <text x="313.6" y="342" text-anchor="middle" class="d-lbl-sm">0.5</text>
+    <text x="409" y="342" text-anchor="middle" class="d-lbl-sm">1</text>
+    <text x="504.4" y="342" text-anchor="middle" class="d-lbl-sm">2</text>
+    <text x="630.6" y="342" text-anchor="middle" class="d-lbl-sm">5</text>
+    <text x="726" y="342" text-anchor="middle" class="d-lbl-sm">10</text>
+    <text x="409" y="366" text-anchor="middle" class="d-tag">E / D &nbsp;&#183;&nbsp; EXECUTION TIME &divide; DECODE TIME &nbsp;(LOG)</text>
+
+    <!-- equal line -->
+    <line x1="409" y1="60" x2="409" y2="322" class="d-rule" stroke-dasharray="4 4"/>
+
+    <!-- curves: h = 0.25, 0.5, 0.75, 1.0 -->
+    <polyline class="s-thin" opacity=".55" points="92,316.4 111,315.6 130,314.7 149.1,313.8 168.1,312.7 187.1,311.5 206.1,310.2 225.1,308.7 244.2,307.1 263.2,305.4 282.2,303.5 301.2,301.4 320.2,299.2 339.3,296.9 358.3,294.5 377.3,291.9 396.3,289.3 415.3,286.6 434.4,283.8 453.4,281 472.4,278.2 491.4,275.5 510.4,272.8 529.5,270.2 548.5,267.7 567.5,265.3 586.5,263.1 605.5,264 624.6,271.5 643.6,278 662.6,283.7 681.6,288.6 700.6,292.9 719.7,296.7 726,297.8"/>
+    <polyline class="s-thin" opacity=".75" points="92,310.5 111,308.9 130,307.1 149.1,305 168.1,302.7 187.1,300.1 206.1,297.2 225.1,293.9 244.2,290.3 263.2,286.3 282.2,281.9 301.2,277 320.2,271.8 339.3,266 358.3,259.9 377.3,253.3 396.3,246.3 415.3,238.9 434.4,231.2 453.4,223.3 472.4,215.1 491.4,206.8 504.1,201.3 510.4,206.3 529.5,221.2 548.5,234.2 567.5,245.6 586.5,255.4 605.5,264 624.6,271.5 643.6,278 662.6,283.7 681.6,288.6 700.6,292.9 719.7,296.7 726,297.8"/>
+    <polyline class="s-spec" opacity=".85" points="92,304.3 111,301.8 130,298.9 149.1,295.6 168.1,291.8 187.1,287.5 206.1,282.7 225.1,277.3 244.2,271.1 263.2,264.1 282.2,256.4 301.2,247.6 320.2,237.9 339.3,227.1 358.3,215.1 377.3,201.8 396.3,187.3 415.3,171.5 434.4,154.4 447,142.2 453.4,146.9 472.4,169.5 491.4,189.2 510.4,206.3 529.5,221.2 548.5,234.2 567.5,245.6 586.5,255.4 605.5,264 624.6,271.5 643.6,278 662.6,283.7 681.6,288.6 700.6,292.9 719.7,296.7 726,297.8"/>
+    <polyline class="s-teal" points="92,297.8 111,294.2 130,290.1 149.1,285.4 168.1,280 187.1,273.8 206.1,266.6 225.1,258.4 244.2,249 263.2,238.2 282.2,225.8 301.2,211.5 320.2,195.1 339.3,176.3 358.3,154.8 377.3,130 396.3,101.5 409,80.3 421.7,101.5 440.7,130 459.7,154.8 478.7,176.3 497.8,195.1 516.8,211.5 535.8,225.8 554.8,238.2 573.8,249 592.9,258.4 611.9,266.6 630.9,273.8 649.9,280 668.9,285.4 688,290.1 707,294.2 726,297.8"/>
+
+    <!-- peak callout -->
+    <circle cx="409" cy="80.3" r="3.5" class="t-teal"/>
+    <line x1="416" y1="76" x2="470" y2="60" class="d-line"/>
+    <text x="476" y="58" class="d-tag t-teal">2&times;, ONLY WHERE D = E</text>
+    <text x="476" y="70" class="d-tag">EVERYTHING ELSE IS WORSE</text>
+
+    <!-- measured point -->
+    <circle cx="187.4" cy="273.7" r="3.5" class="t-spec"/>
+    <line x1="187.4" y1="268" x2="187.4" y2="150" class="d-rule" stroke-dasharray="3 3"/>
+    <text x="196" y="146" class="d-tag t-spec">RLM ON OOLONG: E/D &#8776; 0.2 &#8594; 1.2&times;</text>
+
+    <!-- curve labels -->
+    <text x="418" y="94" class="d-lbl-sm t-teal">h = 1.0</text>
+    <text x="452" y="136" class="d-lbl-sm t-spec">h = 0.75</text>
+    <text x="500" y="196" class="d-lbl-sm">h = 0.5</text>
+    <text x="596" y="258" class="d-lbl-sm">h = 0.25</text>
+  </svg>
+  </div>
+  <figcaption><b>A model, not a measurement.</b> Curves are the formula above at four hit rates. The result worth noting: at <code>E/D &#8776; 0.2</code> with a perfect hit rate the ceiling is <em>exactly</em> 1.2×, the top of Zhang's measured band. His implementation appears to be running near the theoretical maximum for its workload. The technique isn't underperforming; the workload has no more to give.</figcaption>
 </figure>
-<p>One calibration worth keeping whatever your own numbers say: at <code>E/D &#8776; 0.2</code> with a perfect hit rate the ceiling is <em>exactly</em> 1.2&times;, the top of Zhang's measured band. His implementation appears to be running near the theoretical maximum for its workload. The technique isn't underperforming; the workload has no more to give.</p>
 
 <p>Two things follow that you can act on this week. First, <code>E/D</code> is measurable today with two timers and no new code, and it tells you your ceiling before you write a parser. Below about 0.3, your best case is under 1.3× and the shadow interpreter is not worth maintaining.</p>
 
@@ -650,13 +597,6 @@ b = llm_query(<span class="ok">"Use: "</span> + notes)  <span class="no"># block
   </div>
   <figcaption><b>Illustrative, at E/D = 2.5.</b> Latency saved is <code>min(aE, D)</code> and flattens the moment speculated work fills the decode window. Token spend has no such term. It rises with every additional call you launch. The gap to the right of the dashed line is money spent on results that arrive no sooner.</figcaption>
 </figure>
-<figure class="wide">
-  <div class="fig-head"><span class="fig-num">Fig 5</span><span class="fig-name">Does it still pay at your scale?</span><a class="backdash" href="#dash">&#8593; your numbers</a></div>
-  <div class="plate"><svg id="scale" viewBox="0 0 720 292" role="img" aria-label="Speedup plotted against number of concurrent turns, accounting for tool backend saturation."></svg></div>
-  <figcaption id="cap-c"></figcaption>
-</figure>
-</div>
-
 
 <p>Zhang names the real failure mode himself: the tool serving engine clogged with speculative requests. It's nastier than it sounds. Speculative and real calls hit the same engine, so under concurrency (his own benchmark runs 4 and 8 instances against one vLLM server) aggressive speculation makes the thing you were speeding up slower, exactly when the system is busiest. Backpressure and a cap on in-flight speculation aren't a refinement here. They're load-bearing.</p>
 
@@ -682,268 +622,15 @@ b = llm_query(<span class="ok">"Use: "</span> + notes)  <span class="no"># block
 
 <p>None of this argues against the post. It's a good one, the implementation is small and readable, and the two design decisions in Fig 2 are worth stealing whatever else you conclude. The claim I'd add is that the interesting result isn't the speedup. It's that a harness executing model-written code has quietly become a runtime, and it inherits every scheduling, caching, and backpressure question runtimes have always had. Speculation is the first of those to arrive. It won't be the last.</p>
 
+<p class="handoff">That is the argument. <a href="/does-speculation-pay/">Part 2</a> turns it into a calculator: give it your token rate and your backend's tool latency and it tells you which half, if either, is worth building for your workload.</p>
+
 </div></div></main>
 
-<p class="note" id="advice"></p>
 <footer><div class="frame"><div class="col">
 Source: Alex L. Zhang, <a href="https://alexzhang13.github.io/blog/2026/spec-ptc/">Speculative Programmatic Tool Calling</a>, August 2026. Benchmarks quoted from that post: OOLONG (trec-coarse, 132k) and OOLONG-Pairs (32k), Qwen3-30B-A3B-Instruct on 8&times;H100 via vLLM.<br>
 Prior art referenced: Conveyor (Xu et al., 2024); Speculative Interaction Agents (Hooper et al., 2026); AsyncFC (Feng et al., 2026).<br><br>
-Figures 1, 3 and 5 are computed live from the numbers you set, using the models derived on this page; they are analytical, not measurements. Figure 4 is illustrative at E/D = 2.5. Figure 2 follows the reference implementation.
+Figures 3 and 4 are analytical models derived here, not measurements. Figure 1 uses illustrative units. Figure 2 follows the reference implementation.
 </div></div></footer>
 
-<script>
-(function(){
-  "use strict";
-  var IDS=["tps","tok","n","lat","w","h","waste","cc","cap"];
-  var DEF={tps:60,tok:900,n:6,lat:1400,w:4,h:60,waste:25,cc:4,cap:32};
-  var el={},out={};
-  IDS.forEach(function(id){el[id]=document.getElementById(id);out[id]=document.getElementById("o-"+id);});
-
-  function load(){
-    try{var raw=localStorage.getItem("speccalc");if(!raw)return;var v=JSON.parse(raw);
-      IDS.forEach(function(id){if(typeof v[id]==="number"&&isFinite(v[id]))el[id].value=v[id];});
-    }catch(e){}
-  }
-  function save(v){try{localStorage.setItem("speccalc",JSON.stringify(v));}catch(e){}}
-
-  function read(){var v={};IDS.forEach(function(id){v[id]=parseFloat(el[id].value);});return v;}
-  function fmt(x,d){return x.toFixed(d===undefined?2:d);}
-  function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;");}
-
-  // --- model -------------------------------------------------------------
-  function model(v,concurrency){
-    var C=concurrency===undefined?v.cc:concurrency;
-    var D=v.tok/v.tps;                 // decode seconds
-    var t=v.lat/1000;                  // one tool call, seconds
-    var h=v.h/100, w=Math.min(v.w,v.n), waste=v.waste/100;
-    // Backend saturation. The serial path holds ~C calls in flight. The speculative path
-    // holds ~C*w, and additionally pushes wasted calls through the same finite backend,
-    // so it saturates sooner and stays worse once saturated.
-    var tSer=t*Math.max(1,(C*1)/v.cap);
-    var tPar=t*Math.max(1,(C*w*(1+waste*h))/v.cap);
-    var Eseq=v.n*tSer;
-    var base=D+Eseq;
-    var parOnly=D+(v.n/w)*tPar;
-    var specWork=h*v.n, restWork=(1-h)*v.n;
-    var hiddenStream=Math.min(h*v.n*tSer,D);
-    var streamOnly=D+Math.max(0,Eseq-hiddenStream);
-    var specTime=(specWork/w)*tPar;
-    var both=Math.max(D,specTime)+(restWork/w)*tPar;
-    return {D:D,t:t,Eseq:Eseq,base:base,parOnly:parOnly,streamOnly:streamOnly,both:both,
-            hiddenStream:hiddenStream,hiddenBoth:Math.min(D,specTime),
-            wasted:h*v.n*waste,
-            ratio:Eseq/D,sPar:base/parOnly,sStream:base/streamOnly,sBoth:base/both};
-  }
-
-  // --- drawing helpers ---------------------------------------------------
-  function svgEl(tag,attrs,text){
-    var e=document.createElementNS("http://www.w3.org/2000/svg",tag);
-    for(var k in attrs)e.setAttribute(k,attrs[k]);
-    if(text!==undefined)e.textContent=text;
-    return e;
-  }
-  function clear(n){while(n.firstChild)n.removeChild(n.firstChild);}
-
-  // --- Fig A : timing bars ----------------------------------------------
-  function drawBars(m){
-    var s=document.getElementById("bars");clear(s);
-    var X0=132,X1=690;
-    var rows=[
-      ["no speculation",m.base,0],
-      ["parallel dispatch",m.parOnly,0],
-      ["streaming only",m.streamOnly,m.hiddenStream],
-      ["both",m.both,m.hiddenBoth]
-    ];
-    var max=m.base||1,scale=(X1-X0)/max;
-    s.appendChild(svgEl("rect",{x:X0,y:14,width:24,height:9,rx:1.5,class:"bar-d"}));
-    s.appendChild(svgEl("text",{x:X0+31,y:22.5,class:"d-tag"},"DECODE"));
-    s.appendChild(svgEl("rect",{x:X0+120,y:14,width:24,height:9,rx:1.5,class:"bar-e"}));
-    s.appendChild(svgEl("text",{x:X0+151,y:22.5,class:"d-tag"},"TOOL TIME"));
-    s.appendChild(svgEl("rect",{x:X0+250,y:14,width:24,height:9,rx:1.5,class:"bar-s"}));
-    s.appendChild(svgEl("text",{x:X0+281,y:22.5,class:"d-tag"},"RUNNING UNDER DECODE"));
-
-    rows.forEach(function(r,i){
-      var y=48+i*44,total=r[1],hidden=r[2];
-      var dw=Math.min(m.D,total)*scale,tw=Math.max(0,total-m.D)*scale;
-      s.appendChild(svgEl("text",{x:X0-12,y:y+15,"text-anchor":"end",class:"d-lbl"},r[0]));
-      s.appendChild(svgEl("rect",{x:X0,y:y,width:Math.max(1,dw),height:22,rx:2,class:"bar-d"}));
-      if(tw>0.5)s.appendChild(svgEl("rect",{x:X0+dw,y:y,width:tw,height:22,rx:2,class:"bar-e"}));
-      if(hidden>0.01&&dw>6){
-        var sw=Math.max(3,Math.min(dw-4,hidden*scale));
-        s.appendChild(svgEl("rect",{x:X0+2,y:y+15,width:sw,height:5,rx:2,class:"bar-s"}));
-      }
-      s.appendChild(svgEl("text",{x:X0+dw+tw+8,y:y+15,class:"d-sm"},fmt(total,1)+"s"));
-      if(i>0){
-        var g=(m.base-total)/m.base*100;
-        if(g>0.5)s.appendChild(svgEl("text",{x:X0+dw+tw+56,y:y+15,class:"d-sm t-teal"},"\u2212"+fmt(g,0)+"%"));
-      }
-    });
-    s.appendChild(svgEl("line",{x1:X0,y1:228,x2:X1,y2:228,class:"d-rule"}));
-    s.appendChild(svgEl("text",{x:X0,y:222,class:"d-tag"},"WALL CLOCK PER TURN \u2192"));
-  }
-
-  // --- Fig B : the tent --------------------------------------------------
-  function drawTent(v,m){
-    var s=document.getElementById("tent");clear(s);
-    var X0=76,X1=690,Y0=40,Y1=246,SMAX=2.15,h=v.h/100;
-    function px(r){return X0+(Math.log(r)/Math.LN10+1)/2*(X1-X0);}
-    function py(sp){return Y1-(sp-1)/(SMAX-1)*(Y1-Y0);}
-    function sp(r){var saved=Math.min(h*r,1);return (1+r)/(1+r-saved);}
-    [1,1.25,1.5,1.75,2].forEach(function(g){
-      s.appendChild(svgEl("line",{x1:X0,y1:py(g),x2:X1,y2:py(g),class:g===1?"d-rule":"d-grid"}));
-      s.appendChild(svgEl("text",{x:X0-8,y:py(g)+4,"text-anchor":"end",class:"d-sm"},g.toFixed(2)+"×"));
-    });
-    [0.1,0.2,0.5,1,2,5,10].forEach(function(r){
-      s.appendChild(svgEl("text",{x:px(r),y:Y1+18,"text-anchor":"middle",class:"d-sm"},String(r)));
-    });
-    s.appendChild(svgEl("line",{x1:px(1),y1:Y0,x2:px(1),y2:Y1,class:"d-rule","stroke-dasharray":"4 4"}));
-    s.appendChild(svgEl("text",{x:(X0+X1)/2,y:Y1+38,"text-anchor":"middle",class:"d-tag"},
-      "E / D  ·  TOOL TIME ÷ DECODE TIME  (LOG)"));
-    var pts=[],r=0.1;
-    while(r<=10.001){pts.push(px(r).toFixed(1)+","+py(sp(r)).toFixed(1));r*=Math.pow(10,0.03);}
-    s.appendChild(svgEl("polyline",{points:pts.join(" "),class:"s-teal"}));
-    var yr=Math.min(10,Math.max(0.1,m.ratio)),ys=sp(yr);
-    s.appendChild(svgEl("line",{x1:px(yr),y1:py(ys),x2:px(yr),y2:Y1,class:"d-rule","stroke-dasharray":"3 3"}));
-    s.appendChild(svgEl("circle",{cx:px(yr),cy:py(ys),r:5,class:"t-spec"}));
-    var lx=px(yr)<X1-190?px(yr)+12:px(yr)-12;
-    s.appendChild(svgEl("text",{x:lx,y:py(ys)-10,"text-anchor":px(yr)<X1-190?"start":"end",class:"d-sm t-spec"},
-      "you: E/D = "+fmt(m.ratio,2)+" → "+fmt(ys,2)+"× ceiling"));
-    s.appendChild(svgEl("text",{x:px(1),y:Y0-8,"text-anchor":"middle",class:"d-tag t-teal"},"2× MAX, ONLY WHERE D = E"));
-  }
-
-  // --- Fig C : scale sweep ----------------------------------------------
-  function drawScale(v){
-    var s=document.getElementById("scale");clear(s);
-    var X0=76,X1=690,Y0=40,Y1=236,RMAX=2.4;
-    function px(c){return X0+(Math.log(c)/Math.LN2)/6*(X1-X0);}
-    function py(r){return Y1-(r/RMAX)*(Y1-Y0);}
-    s.appendChild(svgEl("rect",{x:X0,y:py(1),width:X1-X0,height:Y1-py(1),class:"w-brick"}));
-    s.appendChild(svgEl("rect",{x:X0,y:Y0,width:X1-X0,height:py(1)-Y0,class:"w-good"}));
-    s.appendChild(svgEl("line",{x1:X0,y1:py(1),x2:X1,y2:py(1),class:"d-rule"}));
-    [0.5,1,1.5,2].forEach(function(g){
-      s.appendChild(svgEl("text",{x:X0-8,y:py(g)+4,"text-anchor":"end",class:"d-sm"},g.toFixed(1)+"×"));
-    });
-    var pts=[],cross=null,prev=null,c=1;
-    while(c<=64.001){
-      var mm=model(v,c),r=mm.sBoth;
-      pts.push(px(c).toFixed(1)+","+py(Math.min(RMAX,r)).toFixed(1));
-      if(prev&&prev.r>=1&&r<1)cross=c;
-      prev={c:c,r:r};c*=Math.pow(2,0.125);
-    }
-    s.appendChild(svgEl("polyline",{points:pts.join(" "),class:"s-teal"}));
-    [1,2,4,8,16,32,64].forEach(function(c){
-      s.appendChild(svgEl("text",{x:px(c),y:Y1+18,"text-anchor":"middle",class:"d-sm"},String(c)));
-    });
-    s.appendChild(svgEl("text",{x:(X0+X1)/2,y:Y1+38,"text-anchor":"middle",class:"d-tag"},"CONCURRENT TURNS (LOG)"));
-    s.appendChild(svgEl("text",{x:X1-12,y:Y0+14,"text-anchor":"end",class:"d-tag t-good"},"SPECULATION WINS"));
-    s.appendChild(svgEl("text",{x:X1-12,y:Y1-10,"text-anchor":"end",class:"d-tag t-brick"},"SPECULATION LOSES"));
-    var here=model(v,v.cc);
-    s.appendChild(svgEl("circle",{cx:px(v.cc),cy:py(Math.min(RMAX,here.sBoth)),r:5,class:"t-spec"}));
-    s.appendChild(svgEl("line",{x1:px(v.cc),y1:Y0,x2:px(v.cc),y2:Y1,class:"d-rule","stroke-dasharray":"3 3"}));
-    if(cross){
-      s.appendChild(svgEl("line",{x1:px(cross),y1:Y0,x2:px(cross),y2:Y1,class:"s-brick","stroke-dasharray":"5 4"}));
-      s.appendChild(svgEl("text",{x:px(cross)-8,y:Y0+12,"text-anchor":"end",class:"d-tag t-brick"},
-        "BREAKS EVEN AT "+Math.round(cross)+" TURNS"));
-    }
-    return cross;
-  }
-
-  // --- render ------------------------------------------------------------
-  function render(){
-    var v=read();save(v);
-    out.tps.textContent=v.tps; out.tok.textContent=v.tok; out.n.textContent=v.n;
-    out.lat.textContent=v.lat; out.w.textContent=v.w; out.h.textContent=v.h;
-    out.waste.textContent=v.waste;
-    out.cc.textContent=v.cc;   out.cap.textContent=v.cap;
-
-    var m=model(v);
-    document.getElementById("s-d").textContent=fmt(m.D,1);
-    document.getElementById("s-e").textContent=fmt(m.Eseq,1);
-    document.getElementById("s-r").textContent=fmt(m.ratio,2);
-    document.getElementById("s-base").textContent=fmt(m.base,1);
-    document.getElementById("s-best").textContent=fmt(m.both,1);
-    document.getElementById("s-waste").textContent=fmt(m.wasted,1);
-
-    drawBars(m); drawTent(v,m); var cross=drawScale(v);
-
-    var best=m.sBoth, pill=document.getElementById("v-pill"), say=document.getElementById("v-say");
-    document.getElementById("v-num").textContent=fmt(best,2)+"×";
-    var streamGain=m.base/m.streamOnly, parGain=m.base/m.parOnly;
-    if(best<1.15){pill.className="pill no";pill.textContent="Not worth building";
-      say.innerHTML="Your tool time is <b>"+fmt(m.ratio,2)+"×</b> your decode time, which leaves almost nothing to hide. "+
-        "Even a flawless implementation returns <b>"+fmt(best,2)+"×</b>. Spend the effort elsewhere.";}
-    else if(best<1.5){pill.className="pill maybe";pill.textContent="Marginal";
-      say.innerHTML="A perfect implementation returns <b>"+fmt(best,2)+"×</b>. Worth it only if turn latency is "+
-        "your headline metric and the work is cheap. Build parallel dispatch, skip the streaming speculator.";}
-    else {pill.className="pill yes";pill.textContent="Worth building";
-      say.innerHTML="A full implementation returns <b>"+fmt(best,2)+"×</b>. "+
-        "Parallel dispatch alone gets you <b>"+fmt(parGain,2)+"×</b> of that for a fraction of the work.";}
-
-    document.getElementById("cap-a").textContent=
-      "Baseline "+fmt(m.base,1)+"s per turn. Parallel dispatch alone: "+fmt(m.parOnly,1)+
-      "s. Streaming speculation alone: "+fmt(m.streamOnly,1)+"s. Both: "+fmt(m.both,1)+"s.";
-    document.getElementById("cap-b").textContent=
-      "The ceiling on streaming overlap is 1 + min(D,E)/max(D,E), so it can never exceed 2× and only reaches it "+
-      "where decode and tool time are equal. At your E/D of "+fmt(m.ratio,2)+" the ceiling is "+
-      fmt((1+Math.min(1,m.ratio)/Math.max(1,m.ratio)),2)+"× with perfect speculation.";
-    document.getElementById("cap-c").textContent= cross
-      ? ("Parallel dispatch multiplies in-flight calls, so your backend saturates first. Past roughly "+
-         Math.round(cross)+" concurrent turns, speculating makes turns slower than not speculating.")
-      : ("Your backend has headroom across the whole range. Speculation still pays at 64 concurrent turns. "+
-         "Raise concurrency or lower capacity to find your wall.");
-
-    var adv=[];
-    if(parGain>=streamGain)adv.push("<b>Parallel dispatch is your bigger win</b> ("+fmt(parGain,2)+"× vs "+fmt(streamGain,2)+
-      "× for streaming). It needs no streaming parser, no shadow interpreter and no purity analysis. Build it first.");
-    else adv.push("<b>Streaming overlap edges out parallel dispatch here</b> ("+fmt(streamGain,2)+"× vs "+fmt(parGain,2)+
-      "×), which means your calls are serially dependent. Widen the dependency graph before adding a speculator.");
-    if(m.ratio<0.3)adv.push("Your tool time is small next to decode. The tools are not your bottleneck, generation is.");
-    if(m.ratio>3)adv.push("Your tools dominate decode, so there is little decode to hide work under. Attack tool latency directly.");
-    if(m.wasted>=1)adv.push("You burn <b>"+fmt(m.wasted,1)+" wasted tool calls per turn</b> on speculation that goes unused. "+
-      "Those are billed and they occupy backend slots. Cap in-flight speculation before this scales.");
-    if(v.h<40)adv.push("Only "+v.h+"% of calls are speculatable, which caps everything above. Check whether an early file read is poisoning the rest of the cell.");
-    document.getElementById("advice").innerHTML=adv.join(" ");
-  }
-
-  IDS.forEach(function(id){el[id].addEventListener("input",render);});
-  document.getElementById("reset").addEventListener("click",function(){
-    IDS.forEach(function(id){el[id].value=DEF[id];});render();
-  });
-  load();render();
-})();
-
-</script>
-<script>
-(function(){
-  "use strict";
-  var dash=document.getElementById("dash"),
-      sentinel=document.querySelector(".dash-sentinel"),
-      num=document.getElementById("v-num"),
-      pill=document.getElementById("v-pill"),
-      mirror=document.getElementById("pin-num");
-  if(!dash||!sentinel||!num||!mirror)return;
-
-  // Sticky only where we can detect the pin point; without IntersectionObserver
-  // a stuck full-height card would cover the viewport, so leave it in the flow.
-  if("IntersectionObserver" in window){
-    document.documentElement.classList.add("can-pin");
-    new IntersectionObserver(function(e){
-      dash.classList.toggle("pinned", !e[0].isIntersecting);
-    },{threshold:0}).observe(sentinel);
-  }
-
-  function sync(){
-    mirror.textContent=num.textContent;
-    var cls=(pill.className.match(/\b(yes|maybe|no)\b/)||[])[1];
-    mirror.className="pin-v"+(cls?" "+cls:"");
-  }
-  // Bubble phase on document, so this runs after the calculator's own
-  // per-input handler has written the new verdict. Capture phase would read
-  // the previous value.
-  ["input","change","click"].forEach(function(ev){
-    document.addEventListener(ev,sync,false);
-  });
-  sync();
-})();
-</script>
-</body></html>
+</body>
+</html>
