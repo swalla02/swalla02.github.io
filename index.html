@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Harness Design Notes</title>
-<meta name="description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency arithmetic behind both.">
+<meta name="description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency and cost arithmetic behind what you serve.">
 <link rel="canonical" href="https://swalla02.github.io/">
 <link rel="icon" href="/assets/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
@@ -14,7 +14,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Harness Design Notes">
 <meta property="og:title" content="Harness Design Notes">
-<meta property="og:description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency arithmetic behind both.">
+<meta property="og:description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency and cost arithmetic behind what you serve.">
 <meta property="og:url" content="https://swalla02.github.io/">
 <meta property="og:image" content="https://swalla02.github.io/assets/og-ceiling.png">
 <meta property="og:image:width" content="1200">
@@ -22,7 +22,7 @@
 <meta property="og:image:alt" content="Harness Design Notes">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Harness Design Notes">
-<meta name="twitter:description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency arithmetic behind both.">
+<meta name="twitter:description" content="Notes on LLM inference and agent harness design: speculative decoding, speculative tool calling, and the latency and cost arithmetic behind what you serve.">
 <meta name="twitter:image" content="https://swalla02.github.io/assets/og-ceiling.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -82,9 +82,10 @@ footer a{color:var(--teal);}
 </div></header>
 
 <div class="hero"><div class="frame">
-  <h1>Latency arithmetic for people who serve models</h1>
+  <h1>Arithmetic for people who serve models</h1>
   <p class="sub">Short technical notes on LLM inference and agent harness design. Each one works
-  out the maths, states its assumptions, and tells you when the technique is not worth building.</p>
+  out the maths, states its assumptions, and tells you when the technique is not worth building —
+  or the price not worth paying.</p>
 </div></div>
 
 <div class="frame">
@@ -95,16 +96,16 @@ footer a{color:var(--teal);}
         <p class="card-kick">A linear price meets a quadratic cost. Work out where they cross.</p>
         <span class="card-go">Read &#8594;</span>
       </a>
-      <a class="card" href="/speculation-ceiling/">
-        <span class="card-kind">Essay</span>
-        <h2>The Speculation Ceiling</h2>
-        <p class="card-kick">Streaming overlap caps at 2x. Parallel dispatch does not.</p>
-        <span class="card-go">Read &#8594;</span>
-      </a>
       <a class="card" href="/speculative-decoding/">
         <span class="card-kind">Essay</span>
         <h2>Speculative Decoding</h2>
         <p class="card-kick">2-3x faster, and mathematically identical output.</p>
+        <span class="card-go">Read &#8594;</span>
+      </a>
+      <a class="card" href="/speculation-ceiling/">
+        <span class="card-kind">Essay</span>
+        <h2>The Speculation Ceiling</h2>
+        <p class="card-kick">Streaming overlap caps at 2x. Parallel dispatch does not.</p>
         <span class="card-go">Read &#8594;</span>
       </a>
       <a class="card" href="/does-speculation-pay/">
