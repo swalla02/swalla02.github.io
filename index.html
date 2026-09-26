@@ -119,7 +119,19 @@ footer a{color:var(--teal);}
 
 <footer><div class="frame">
   Figures marked as models are analytical, not measurements; assumptions are stated in each caption.<br>
-  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a>
+  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a><br>
+  Page counts via GoatCounter: no cookies, no personal data, nothing that identifies you.
 </div></footer>
+<script>
+// GoatCounter: cookieless page counts, no personal data, no consent banner.
+// Production host only, so local previews are not counted.
+if (location.hostname === "swalla02.github.io") {
+  var gc = document.createElement("script");
+  gc.async = true;
+  gc.src = "//gc.zgo.at/count.js";
+  gc.setAttribute("data-goatcounter", "https://swalla02.goatcounter.com/count");
+  document.head.appendChild(gc);
+}
+</script>
 </body>
 </html>
