@@ -3,6 +3,7 @@
 Static site, no build step. Every page is self-contained HTML.
 
 - `/` landing
+- `/decision-architectures/` Four Ways to Not Generate Text — interactive
 - `/jev-economics/` What Jev's Price Card Implies
 - `/speculation-ceiling/` The Speculation Ceiling — Speculative tool calling, part 1
 - `/speculative-decoding/` Speculative Decoding
