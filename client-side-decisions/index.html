@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>A Decision Model in 23 Megabytes</title>
+<meta name="description" content="A typed decision model running entirely in the browser: 23MB of quantised weights, a 12KB action table, and no server in the loop. Includes the measurement that action phrasing is worth 31 points of accuracy.">
+<link rel="canonical" href="https://swalla02.github.io/client-side-decisions/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="A Decision Model in 23 Megabytes">
+<meta property="og:description" content="A typed decision model running entirely in the browser, and the measurement that action phrasing is worth 31 points of accuracy.">
+<meta property="og:url" content="https://swalla02.github.io/client-side-decisions/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A Decision Model in 23 Megabytes">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A Decision Model in 23 Megabytes">
+<meta name="twitter:description" content="A typed decision model running entirely in the browser, and the measurement that action phrasing is worth 31 points of accuracy.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --ground:#F2F4F3; --surface:#FBFCFB; --sunk:#E8ECEA;
+  --ink:#111B1C; --ink-soft:#3D4E4E; --muted:#5E7070; --rule:#D3DBD9;
+  --teal:#0E7C86; --teal-wash:#0E7C8618;
+  --spec:#C2711A; --spec-wash:#C2711A20;
+  --decode:#4C5C86; --decode-wash:#4C5C8620;
+  --brick:#A24A38; --brick-wash:#A24A3818;
+  --good:#1F7350; --good-wash:#1F735016;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --ground:#0C1416; --surface:#121D1F; --sunk:#172426;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998; --rule:#223234;
+  --teal:#4FD4CB; --teal-wash:#4FD4CB1F;
+  --spec:#E5A54E; --spec-wash:#E5A54E24;
+  --decode:#8FA0CC; --decode-wash:#8FA0CC24;
+  --brick:#DE8B77; --brick-wash:#DE8B7720;
+  --good:#57C68F; --good-wash:#57C68F1C;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0C1416; --surface:#121D1F; --sunk:#172426;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998; --rule:#223234;
+  --teal:#4FD4CB; --teal-wash:#4FD4CB1F;
+  --spec:#E5A54E; --spec-wash:#E5A54E24;
+  --decode:#8FA0CC; --decode-wash:#8FA0CC24;
+  --brick:#DE8B77; --brick-wash:#DE8B7720;
+  --good:#57C68F; --good-wash:#57C68F1C;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);
+  font-size:1rem;line-height:1.62;-webkit-font-smoothing:antialiased;
+  padding-inline:20px;padding-block:0 60px;}
+.wrap{max-width:1060px;margin:0 auto;}
+
+header.top{border-bottom:1px solid var(--rule);background:var(--surface);
+  margin-inline:-20px;padding-inline:20px;}
+.top .inner{max-width:1060px;margin:0 auto;display:flex;justify-content:space-between;
+  align-items:center;padding-block:.75rem;gap:1rem;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:.6rem;}
+.mark{display:block;width:26px;height:26px;flex:0 0 26px;border-radius:3px;
+  background:url(/assets/robot.png) center/cover;}
+.kick{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+.kick a{color:var(--teal);}
+
+.hero{padding:3rem 0 1.4rem;}
+.eyebrow{font-family:var(--mono);font-size:.66rem;font-weight:600;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--teal);margin:0 0 1rem;}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2rem,5.5vw,3.3rem);
+  line-height:1.0;letter-spacing:-.033em;margin:0 0 .95rem;text-wrap:balance;}
+.standfirst{font-size:1.08rem;color:var(--ink-soft);margin:0;max-width:64ch;text-wrap:pretty;}
+.standfirst b{color:var(--ink);font-weight:600;}
+
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:3px;
+  padding:1.15rem 1.1rem 1.25rem;margin-bottom:12px;}
+.card-top{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:baseline;margin-bottom:.4rem;}
+.card-top h2{font-family:var(--display);font-weight:700;font-size:1.28rem;letter-spacing:-.022em;margin:0;}
+.card-top .tag{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;padding:.25rem .5rem;border-radius:2px;background:var(--sunk);color:var(--muted);}
+.note{margin:0 0 1rem;color:var(--ink-soft);font-size:.97rem;max-width:72ch;}
+.note b{color:var(--ink);font-weight:600;}
+.cap{margin-top:.6rem;font-family:var(--mono);font-size:.68rem;line-height:1.65;color:var(--muted);}
+code{font-family:var(--mono);font-size:.85em;background:var(--sunk);padding:.1em .34em;border-radius:2px;}
+
+.btn{font:inherit;font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;cursor:pointer;background:var(--ink);color:var(--ground);
+  border:1px solid var(--ink);border-radius:2px;padding:.55rem 1rem;}
+.btn:hover{opacity:.85;}
+.btn[disabled]{opacity:.4;cursor:default;}
+.btn.ghost{background:none;color:var(--muted);border-color:var(--rule);}
+.btn.ghost:hover{color:var(--ink);border-color:var(--muted);}
+.btn.ghost[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);background:var(--sunk);}
+.row-ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+
+.bar{height:8px;border-radius:4px;background:var(--sunk);overflow:hidden;margin:.8rem 0 .5rem;}
+.bar i{display:block;height:100%;background:var(--teal);width:0;transition:width .2s;}
+.mono{font-family:var(--mono);font-size:.74rem;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+.mono b{color:var(--ink);font-weight:600;}
+.err{background:var(--brick-wash);border-left:2px solid var(--brick);padding:.7rem .8rem;
+  border-radius:2px;font-size:.9rem;color:var(--ink-soft);margin-top:.8rem;}
+.err[hidden]{display:none;}
+
+.split{display:grid;grid-template-columns:1fr 320px;gap:14px;align-items:start;}
+@media (max-width:900px){.split{grid-template-columns:1fr;}}
+textarea,input[type=text]{width:100%;font:inherit;font-size:.92rem;padding:.6rem .7rem;
+  background:var(--sunk);border:1px solid var(--rule);border-radius:2px;color:var(--ink);
+  font-family:var(--body);resize:vertical;}
+.acts{display:flex;flex-direction:column;gap:6px;}
+.act{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:center;}
+@media (max-width:620px){.act{grid-template-columns:1fr;gap:3px;}}
+.act .lbl{font-family:var(--mono);font-size:.68rem;color:var(--ink);font-weight:600;}
+.act input{font-family:var(--body);font-size:.85rem;padding:.4rem .55rem;}
+
+.rank{display:flex;flex-direction:column;gap:5px;}
+.rank-h{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.6rem;
+  font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:.25rem;}
+.r{display:grid;grid-template-columns:1fr auto;gap:.4rem .6rem;padding:.42rem .55rem;
+  border-radius:2px;background:var(--sunk);}
+.r.top{background:var(--teal-wash);}
+.r .n{font-size:.86rem;line-height:1.25;}
+.r .s{font-family:var(--mono);font-size:.76rem;font-weight:600;color:var(--teal);font-variant-numeric:tabular-nums;}
+.r .b{grid-column:1/-1;height:4px;border-radius:2px;background:var(--rule);overflow:hidden;}
+.r .b i{display:block;height:100%;background:var(--teal);}
+
+.scores{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;
+  background:var(--rule);border:1px solid var(--rule);border-radius:2px;overflow:hidden;margin:1rem 0 .4rem;}
+.sc{background:var(--surface);padding:.75rem .85rem;}
+.sc .k{font-family:var(--mono);font-size:.58rem;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--muted);display:block;margin-bottom:.25rem;}
+.sc .v{font-family:var(--display);font-weight:700;font-size:1.5rem;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;}
+.sc .u{font-family:var(--mono);font-size:.66rem;color:var(--muted);margin-left:.2rem;}
+
+table.t{width:100%;border-collapse:collapse;font-size:.85rem;margin-top:.6rem;}
+table.t th,table.t td{text-align:left;padding:.42rem .6rem;border-bottom:1px solid var(--rule);}
+table.t th{font-family:var(--mono);font-size:.58rem;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted);}
+table.t td{color:var(--ink-soft);}
+td.ok{color:var(--good);font-family:var(--mono);font-size:.78rem;}
+td.no{color:var(--brick);font-family:var(--mono);font-size:.78rem;}
+.scroller{overflow-x:auto;}
+
+.backlink{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--teal);text-decoration:none;display:inline-block;margin:1.6rem 0 0;}
+footer.site{border-top:1px solid var(--rule);margin-top:2.2rem;padding:1.8rem 0 1rem;
+  font-family:var(--mono);font-size:.7rem;line-height:1.8;color:var(--muted);}
+footer.site a{color:var(--teal);}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="inner">
+  <span class="brand"><span class="mark" role="img" aria-label="Site mark"></span>
+  <span class="kick">Harness Design Notes</span></span>
+  <span class="kick"><a href="/">All notes</a></span>
+</div></header>
+
+<div class="wrap">
+
+<div class="hero">
+  <p class="eyebrow">Client-side inference</p>
+  <h1>A decision model in 23 megabytes</h1>
+  <p class="standfirst">Everything on this page runs on your machine. The weights come from a CDN once,
+  the tokenizer runs in your tab, and the text you type is scored locally and never sent anywhere.
+  It is the architecture from <a href="/decision-architectures/">the previous note</a> at production
+  size: <b>a small encoder for the state, a precomputed table for the actions</b>, and a dot product
+  between them.</p>
+</div>
+
+<section class="card">
+  <div class="card-top"><h2>Load it</h2><span class="tag">nothing downloads until you ask</span></div>
+  <p class="note">A quantised <code>all-MiniLM-L6-v2</code> &mdash; 23.0&nbsp;MB of int8 weights plus a
+  712&nbsp;KB tokenizer. Your browser caches it, so this cost is paid once and the second visit starts
+  instantly. On a phone, mind the bill.</p>
+  <div class="row-ctl">
+    <button class="btn" id="load">Download the model</button>
+    <span class="mono" id="lstat">idle</span>
+  </div>
+  <div class="bar"><i id="lbar"></i></div>
+  <div class="err" id="lerr" hidden></div>
+</section>
+
+<section class="card">
+  <div class="card-top"><h2>Score a ticket</h2><span class="tag">real embeddings</span></div>
+  <div class="split">
+    <div>
+      <p class="note">The eight actions below are the answer set. Each one is embedded once; your
+      ticket is embedded on every keystroke and scored by cosine similarity against the table. Edit any
+      description and it re-embeds &mdash; that is the open answer set, done rather than claimed.</p>
+      <label class="kick" for="tick" style="display:block;margin-bottom:.35rem">Ticket</label>
+      <textarea id="tick" rows="2">the parcel turned up smashed, send another</textarea>
+      <div class="scores">
+        <div class="sc"><span class="k">Encode</span><span class="v" id="s-ms">&ndash;</span><span class="u">ms</span></div>
+        <div class="sc"><span class="k">Action table</span><span class="v" id="s-tab">&ndash;</span><span class="u">KB</span></div>
+        <div class="sc"><span class="k">Dimensions</span><span class="v" id="s-dim">&ndash;</span></div>
+        <div class="sc"><span class="k">Sent to a server</span><span class="v" style="color:var(--good)">0</span><span class="u">bytes</span></div>
+      </div>
+      <div class="row-ctl" style="margin-top:.9rem">
+        <button class="btn ghost" id="v-desc" aria-pressed="true">Written as descriptions</button>
+        <button class="btn ghost" id="v-lbl">Bare labels</button>
+        <button class="btn ghost" id="reembed">Re-embed</button>
+      </div>
+      <p class="cap">The two buttons swap the action set between plain labels and the same eight
+      written the way a ticket is written. Watch the ranking change, then run the suite below.</p>
+    </div>
+    <div>
+      <div class="rank-h"><span>Ranked actions</span><span>cosine</span></div>
+      <div class="rank" id="rank"><p class="mono">load the model first</p></div>
+    </div>
+  </div>
+  <div class="acts" id="acts" style="margin-top:1rem"></div>
+</section>
+
+<section class="card">
+  <div class="card-top"><h2>Phrasing is worth 32 points</h2><span class="tag">22 cases, no fine-tuning</span></div>
+  <p class="note">Same model, same tickets, same eight actions. The only thing that changes is how the
+  action is worded. Nothing is trained, nothing is tuned; this is entirely a question of what text you
+  put on the other side of the dot product.</p>
+  <div class="row-ctl">
+    <button class="btn" id="run">Run both action sets</button>
+    <span class="mono" id="rstat"></span>
+  </div>
+  <div class="scores">
+    <div class="sc"><span class="k">Bare labels</span><span class="v" id="a-lbl">&ndash;</span><span class="u">%</span></div>
+    <div class="sc"><span class="k">Descriptions</span><span class="v" id="a-desc" style="color:var(--good)">&ndash;</span><span class="u">%</span></div>
+    <div class="sc"><span class="k">Chance</span><span class="v" style="color:var(--muted)">12.5</span><span class="u">%</span></div>
+    <div class="sc"><span class="k">Cases</span><span class="v" id="a-n">22</span></div>
+  </div>
+  <div class="scroller"><table class="t" id="tt"></table></div>
+  <p class="cap">Accuracy over a fixed 22-case set, computed in your browser when you press the button.
+  A larger and more adversarial set would move these numbers; the gap between the two columns is the
+  part that generalises.</p>
+</section>
+
+<section class="card">
+  <div class="card-top"><h2>What this is and is not</h2></div>
+  <p class="note"><b>It is a real deployment shape.</b> Encode the actions at build time, ship the
+  vectors as a few kilobytes of JSON, run only the state tower on the client. Adding an action later
+  is a JSON edit, not a retrain. A cross-encoder cannot work this way &mdash; it needs a forward pass
+  per candidate, on the client, every time.</p>
+  <p class="note"><b>It is not Laya, and does not need to be.</b> Laya is 421M parameters because it is
+  general across many decision types. This is 22M because the task is eight buckets. Laya's own card
+  reports 0.362 for its base checkpoint against a 0.461 majority baseline and 0.766 once fine-tuned:
+  the fitting does the work, not the scale.</p>
+  <p class="note"><b>The honest caveats.</b> A 22-case suite is small. The model is an English sentence
+  encoder, so other languages will fall over. The weights are public, which is fine here and wrong if
+  the fine-tune is your product. And cosine similarity is a ranking, not a calibrated probability
+  &mdash; if you want the number to mean something, fit a temperature on held-out labels, as in
+  <a href="/decision-architectures/">the previous note</a>.</p>
+</section>
+
+<a class="backlink" href="/">&#8592; All notes</a>
+
+<footer class="site">
+  Model: <a href="https://huggingface.co/Xenova/all-MiniLM-L6-v2">Xenova/all-MiniLM-L6-v2</a>, int8,
+  fetched from the Hugging Face CDN and cached by your browser. Runtime:
+  <a href="https://github.com/huggingface/transformers.js">transformers.js</a> over ONNX Runtime Web,
+  loaded from jsDelivr. Accuracy figures are computed on this page over a fixed 22-case set and are
+  not a benchmark.<br>
+  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a>
+</footer>
+
+</div>
+
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.0/dist/transformers.min.js';
+env.allowLocalModels = false;                      /* always the CDN copy */
+
+const $ = id => document.getElementById(id);
+
+const LABELS = ['Send tracking link','Refund the order','Refund shipping only','Replace the item',
+                'Cancel the subscription','Close as spam','Escalate to a human','Escalate to legal'];
+const DESCS  = [
+  'the customer is asking where their order is and wants tracking information',
+  'the customer wants their money back for the whole order',
+  'the customer wants a refund of the delivery or shipping charge only',
+  'the item arrived damaged or faulty and the customer wants a replacement sent',
+  'the customer wants to stop their recurring subscription or billing',
+  'this is unsolicited advertising or a scam link, not a real support request',
+  'the customer is angry and demands to speak to a person or a manager',
+  'the customer is threatening legal action or mentions a lawyer'
+];
+const CASES = [
+  ['my package never arrived and tracking has not moved in a week',0],
+  ['where is my order, the tracking number does not work',0],
+  ['my parcel never showed up',0],
+  ['i want my money back for the whole order',1],
+  ['please refund me completely, the product is useless',1],
+  ['give me my money back',1],
+  ['i was charged twice for delivery, refund the shipping',2],
+  ['the shipping fee was wrong, refund just that part',2],
+  ['refund the delivery charge only',2],
+  ['the item arrived broken, send me a new one',3],
+  ['screen was cracked on arrival, i need a replacement',3],
+  ['the parcel turned up smashed, send another',3],
+  ['cancel my monthly plan please',4],
+  ['i do not want to be billed again, end my subscription',4],
+  ['stop billing me every month',4],
+  ['buy cheap watches now click here',5],
+  ['free crypto giveaway click this link fast',5],
+  ['win a free iphone click now',5],
+  ['this is unacceptable i want a manager right now',6],
+  ['get me a supervisor immediately',6],
+  ['i will be contacting my lawyer about this',7],
+  ['my solicitor will be in touch',7]
+];
+
+let extractor = null, table = null, dim = 0, variant = 'desc';
+const texts = () => variant === 'desc'
+  ? [...document.querySelectorAll('.act input')].map(i => i.value)
+  : LABELS.slice();
+
+function drawActs(){
+  $('acts').innerHTML = LABELS.map((l,i) =>
+    `<div class="act"><span class="lbl">${l}</span>` +
+    `<input type="text" data-i="${i}" value="${DESCS[i].replace(/"/g,'&quot;')}"></div>`).join('');
+  document.querySelectorAll('.act input').forEach(inp =>
+    inp.addEventListener('change', () => { if(extractor) embedTable(); }));
+}
+drawActs();
+
+async function embed(list){
+  const out = await extractor(list, { pooling:'mean', normalize:true });
+  return out.tolist();
+}
+function cos(a,b){ let s=0; for(let i=0;i<a.length;i++) s+=a[i]*b[i]; return s; }
+
+async function embedTable(){
+  table = await embed(texts());
+  dim = table[0].length;
+  $('s-tab').textContent = (table.length*dim*4/1024).toFixed(0);
+  $('s-dim').textContent = dim;
+  score();
+}
+
+let busy = false, pending = false;
+async function score(){
+  if(!extractor || !table) return;
+  if(busy){ pending = true; return; }
+  busy = true;
+  const q = $('tick').value.trim();
+  if(!q){ $('rank').innerHTML = '<p class="mono">type something</p>'; busy=false; return; }
+  const t0 = performance.now();
+  const [v] = await embed([q]);
+  $('s-ms').textContent = (performance.now()-t0).toFixed(0);
+  const rows = table.map((a,i) => [cos(v,a), i]).sort((x,y) => y[0]-x[0]);
+  $('rank').innerHTML = rows.map(([s,i],k) =>
+    `<div class="r${k===0?' top':''}"><span class="n">${LABELS[i]}</span>` +
+    `<span class="s">${s.toFixed(3)}</span>` +
+    `<span class="b"><i style="width:${Math.max(0,Math.min(100,s*100)).toFixed(0)}%"></i></span></div>`).join('');
+  busy = false;
+  if(pending){ pending = false; score(); }
+}
+$('tick').addEventListener('input', score);
+
+$('load').addEventListener('click', async () => {
+  const btn = $('load'); btn.disabled = true; $('lerr').hidden = true;
+  const seen = {};
+  try {
+    $('lstat').textContent = 'fetching runtime and weights…';
+    extractor = await pipeline('feature-extraction','Xenova/all-MiniLM-L6-v2',{
+      dtype:'q8',
+      progress_callback: p => {
+        if(p.status === 'progress' && p.file){
+          seen[p.file] = p;
+          const done = Object.values(seen).reduce((a,x)=>a+(x.loaded||0),0);
+          const all  = Object.values(seen).reduce((a,x)=>a+(x.total||0),0);
+          if(all){
+            $('lbar').style.width = (done/all*100).toFixed(1)+'%';
+            $('lstat').innerHTML = `<b>${(done/1048576).toFixed(1)}</b> / ${(all/1048576).toFixed(1)} MB`;
+          }
+        }
+      }
+    });
+    $('lbar').style.width = '100%';
+    $('lstat').innerHTML = '<b>ready</b> — cached, instant next visit';
+    btn.textContent = 'Loaded';
+    await embedTable();
+  } catch (e) {
+    btn.disabled = false;
+    $('lstat').textContent = 'failed';
+    $('lerr').hidden = false;
+    $('lerr').innerHTML = '<b>Could not load the model.</b> The weights come from the Hugging Face CDN ' +
+      'and the runtime from jsDelivr, so a blocked CDN, an offline tab or a strict extension will stop ' +
+      'it here. Everything above still reads fine; only the live scoring needs the download. ' +
+      '<br><span class="mono">' + String(e).slice(0,160) + '</span>';
+  }
+});
+
+for (const [id,v] of [['v-desc','desc'],['v-lbl','label']]) {
+  $(id).addEventListener('click', async () => {
+    variant = v;
+    $('v-desc').setAttribute('aria-pressed', v==='desc' ? 'true':'false');
+    $('v-lbl').setAttribute('aria-pressed',  v==='label'? 'true':'false');
+    if(extractor) await embedTable();
+  });
+}
+$('reembed').addEventListener('click', () => { if(extractor) embedTable(); });
+
+$('run').addEventListener('click', async () => {
+  if(!extractor){ $('rstat').textContent = 'load the model first'; return; }
+  const btn = $('run'); btn.disabled = true; $('rstat').textContent = 'embedding 22 tickets…';
+  const X = await embed(CASES.map(c => c[0]));
+  const sets = { label: await embed(LABELS), desc: await embed(texts()) };
+  const res = {};
+  for (const k of ['label','desc']) {
+    res[k] = X.map(x => {
+      let best = 0, bs = -9;
+      sets[k].forEach((a,j) => { const s = cos(x,a); if(s > bs){ bs = s; best = j; } });
+      return best;
+    });
+  }
+  const acc = k => res[k].filter((b,i) => b === CASES[i][1]).length / CASES.length * 100;
+  $('a-lbl').textContent  = acc('label').toFixed(1);
+  $('a-desc').textContent = acc('desc').toFixed(1);
+  $('rstat').textContent = `${(acc('desc')-acc('label')).toFixed(1)} point gap, measured just now`;
+  $('tt').innerHTML =
+    '<thead><tr><th>Ticket</th><th>Correct</th><th>Bare label</th><th>Description</th></tr></thead><tbody>' +
+    CASES.map(([t,want],i) => {
+      const cell = k => {
+        const g = res[k][i];
+        return `<td class="${g===want?'ok':'no'}">${g===want?'ok':'&#10007; '+LABELS[g]}</td>`;
+      };
+      return `<tr><td>${t}</td><td>${LABELS[want]}</td>${cell('label')}${cell('desc')}</tr>`;
+    }).join('') + '</tbody>';
+  btn.disabled = false;
+});
+</script>
+
+<script>
+// GoatCounter: cookieless page counts, no personal data, no consent banner.
+// Production host only, so local previews are not counted.
+if (location.hostname === "swalla02.github.io") {
+  var gc = document.createElement("script");
+  gc.async = true;
+  gc.src = "//gc.zgo.at/count.js";
+  gc.setAttribute("data-goatcounter", "https://swalla02.goatcounter.com/count");
+  document.head.appendChild(gc);
+}
+</script>
+</body>
+</html>
