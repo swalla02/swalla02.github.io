@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Is This Visitor an Agent?</title>
+<meta name="description" content="A client-side agent detector: fourteen environmental and behavioural signals, naive-Bayes log-odds, a calibrated probability and the evidence that produced it. Including why it is a speed bump and not a wall.">
+<link rel="canonical" href="https://swalla02.github.io/agent-detection/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="Is This Visitor an Agent?">
+<meta property="og:description" content="Fourteen client-side signals, naive-Bayes log-odds, a calibrated probability and the evidence that produced it.">
+<meta property="og:url" content="https://swalla02.github.io/agent-detection/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Is This Visitor an Agent?">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Is This Visitor an Agent?">
+<meta name="twitter:description" content="Fourteen client-side signals, naive-Bayes log-odds, a calibrated probability and the evidence that produced it.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --ground:#F2F4F3; --surface:#FBFCFB; --sunk:#E8ECEA;
+  --ink:#111B1C; --ink-soft:#3D4E4E; --muted:#5E7070; --rule:#D3DBD9;
+  --teal:#0E7C86; --teal-wash:#0E7C8618;
+  --spec:#C2711A; --spec-wash:#C2711A20;
+  --decode:#4C5C86; --decode-wash:#4C5C8620;
+  --brick:#A24A38; --brick-wash:#A24A3818;
+  --good:#1F7350; --good-wash:#1F735016;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --ground:#0C1416; --surface:#121D1F; --sunk:#172426;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998; --rule:#223234;
+  --teal:#4FD4CB; --teal-wash:#4FD4CB1F;
+  --spec:#E5A54E; --spec-wash:#E5A54E24;
+  --decode:#8FA0CC; --decode-wash:#8FA0CC24;
+  --brick:#DE8B77; --brick-wash:#DE8B7720;
+  --good:#57C68F; --good-wash:#57C68F1C;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0C1416; --surface:#121D1F; --sunk:#172426;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998; --rule:#223234;
+  --teal:#4FD4CB; --teal-wash:#4FD4CB1F;
+  --spec:#E5A54E; --spec-wash:#E5A54E24;
+  --decode:#8FA0CC; --decode-wash:#8FA0CC24;
+  --brick:#DE8B77; --brick-wash:#DE8B7720;
+  --good:#57C68F; --good-wash:#57C68F1C;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;}
+body{background:var(--ground);color:var(--ink);font-family:var(--body);
+  font-size:1rem;line-height:1.62;-webkit-font-smoothing:antialiased;
+  padding-inline:20px;padding-block:0 60px;}
+.wrap{max-width:1060px;margin:0 auto;}
+header.top{border-bottom:1px solid var(--rule);background:var(--surface);
+  margin-inline:-20px;padding-inline:20px;}
+.top .inner{max-width:1060px;margin:0 auto;display:flex;justify-content:space-between;
+  align-items:center;padding-block:.75rem;gap:1rem;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:.6rem;}
+.mark{display:block;width:26px;height:26px;flex:0 0 26px;border-radius:3px;
+  background:url(/assets/robot.png) center/cover;}
+.kick{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);}
+.kick a{color:var(--teal);}
+.hero{padding:3rem 0 1.4rem;}
+.eyebrow{font-family:var(--mono);font-size:.66rem;font-weight:600;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--teal);margin:0 0 1rem;}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(2rem,5.5vw,3.3rem);
+  line-height:1.0;letter-spacing:-.033em;margin:0 0 .95rem;text-wrap:balance;}
+.standfirst{font-size:1.08rem;color:var(--ink-soft);margin:0;max-width:64ch;text-wrap:pretty;}
+.standfirst b{color:var(--ink);font-weight:600;}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:3px;
+  padding:1.15rem 1.1rem 1.25rem;margin-bottom:12px;}
+.card-top{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:baseline;margin-bottom:.45rem;}
+.card-top h2{font-family:var(--display);font-weight:700;font-size:1.28rem;letter-spacing:-.022em;margin:0;}
+.card-top .tag{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.12em;
+  text-transform:uppercase;padding:.25rem .5rem;border-radius:2px;background:var(--sunk);color:var(--muted);}
+.note{margin:0 0 1rem;color:var(--ink-soft);font-size:.97rem;max-width:72ch;}
+.note b{color:var(--ink);font-weight:600;}
+.cap{margin-top:.7rem;font-family:var(--mono);font-size:.68rem;line-height:1.65;color:var(--muted);}
+code{font-family:var(--mono);font-size:.85em;background:var(--sunk);padding:.1em .34em;border-radius:2px;}
+
+.verdict{display:grid;grid-template-columns:auto 1fr;gap:1.8rem;align-items:center;
+  padding:.4rem 0 .9rem;}
+@media (max-width:640px){.verdict{grid-template-columns:1fr;gap:.9rem;}}
+.vnum{font-family:var(--display);font-weight:700;font-size:3.6rem;line-height:.9;
+  letter-spacing:-.04em;font-variant-numeric:tabular-nums;}
+.vlab{font-family:var(--mono);font-size:.64rem;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:.45rem;}
+.pill{display:inline-block;font-family:var(--mono);font-size:.64rem;font-weight:600;
+  letter-spacing:.11em;text-transform:uppercase;padding:.28rem .6rem;border-radius:2px;margin-bottom:.55rem;}
+.pill.human{background:var(--good-wash);color:var(--good);}
+.pill.unsure{background:var(--spec-wash);color:var(--spec);}
+.pill.agent{background:var(--brick-wash);color:var(--brick);}
+.vsay{font-size:1.02rem;line-height:1.5;margin:0;color:var(--ink-soft);}
+.vsay b{color:var(--ink);font-weight:600;}
+
+.scroller{overflow-x:auto;}
+table.sig{width:100%;border-collapse:collapse;font-size:.86rem;min-width:600px;}
+table.sig th,table.sig td{text-align:left;padding:.44rem .6rem;border-bottom:1px solid var(--rule);
+  vertical-align:top;}
+table.sig th{font-family:var(--mono);font-size:.58rem;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted);}
+table.sig td.name{color:var(--ink);}
+table.sig td.obs{font-family:var(--mono);font-size:.76rem;color:var(--ink-soft);
+  max-width:230px;overflow-wrap:anywhere;}
+table.sig td.w{font-family:var(--mono);font-size:.76rem;font-variant-numeric:tabular-nums;text-align:right;}
+tr.fired td.name{font-weight:600;}
+tr.fired td.w{color:var(--brick);font-weight:600;}
+tr.clear td.w{color:var(--muted);}
+tr.pending td{opacity:.55;}
+.grp td{background:var(--sunk);font-family:var(--mono);font-size:.58rem;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted);padding-top:.5rem;padding-bottom:.5rem;}
+
+.ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:.9rem;}
+.ctl label{font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;color:var(--muted);
+  display:flex;align-items:center;gap:.5rem;}
+.ctl input[type=range]{width:140px;accent-color:var(--teal);}
+.mono{font-family:var(--mono);font-size:.74rem;color:var(--ink-soft);font-variant-numeric:tabular-nums;}
+.mono b{color:var(--ink);font-weight:600;}
+.btn{font:inherit;font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.11em;
+  text-transform:uppercase;cursor:pointer;background:none;color:var(--muted);
+  border:1px solid var(--rule);border-radius:2px;padding:.5rem .9rem;}
+.btn:hover{color:var(--ink);border-color:var(--muted);}
+.pad{background:var(--sunk);border:1px dashed var(--rule);border-radius:3px;height:96px;
+  display:grid;place-items:center;font-family:var(--mono);font-size:.7rem;color:var(--muted);
+  margin-top:.7rem;text-align:center;padding:0 1rem;}
+.pad input{margin-top:.4rem;font:inherit;font-family:var(--body);font-size:.9rem;padding:.4rem .55rem;
+  background:var(--surface);border:1px solid var(--rule);border-radius:2px;color:var(--ink);}
+.warnbox{padding:.7rem .8rem;border-radius:2px;background:var(--spec-wash);
+  border-left:2px solid var(--spec);font-size:.92rem;line-height:1.55;color:var(--ink-soft);margin-top:.9rem;}
+.warnbox b{color:var(--ink);font-weight:600;}
+.backlink{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--teal);text-decoration:none;display:inline-block;margin:1.6rem 0 0;}
+footer.site{border-top:1px solid var(--rule);margin-top:2.2rem;padding:1.8rem 0 1rem;
+  font-family:var(--mono);font-size:.7rem;line-height:1.8;color:var(--muted);}
+footer.site a{color:var(--teal);}
+:focus-visible{outline:2px solid var(--teal);outline-offset:2px;}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="inner">
+  <span class="brand"><span class="mark" role="img" aria-label="Site mark"></span>
+  <span class="kick">Harness Design Notes</span></span>
+  <span class="kick"><a href="/">All notes</a></span>
+</div></header>
+
+<div class="wrap">
+
+<div class="hero">
+  <p class="eyebrow">Agent traffic &middot; client-side</p>
+  <h1>Is this visitor an agent?</h1>
+  <p class="standfirst">The same shape as the last two notes &mdash; a typed decision made on the client,
+  with a calibrated probability instead of a verdict &mdash; pointed at a question sites actually have
+  in 2026. The model is <b>fourteen signals and a few hundred bytes of weights</b>, not a language
+  model. It is scoring you right now, and showing its working.</p>
+</div>
+
+<section class="card">
+  <div class="card-top"><h2>The verdict on you</h2><span class="tag" id="phase">collecting</span></div>
+  <div class="verdict">
+    <div><div class="vlab">P(agent)</div><div class="vnum" id="p">&mdash;</div></div>
+    <div>
+      <span class="pill unsure" id="pill">measuring</span>
+      <p class="vsay" id="say">Reading the environment now. Behavioural signals need a few seconds of
+      you being present, so move the pointer or press a key and watch the table fill in.</p>
+    </div>
+  </div>
+  <div class="mono" id="sum"></div>
+  <div class="pad" id="pad">move the pointer through here, then type something
+    <input type="text" id="typ" placeholder="type here" aria-label="typing probe"></div>
+  <div class="ctl">
+    <label for="prior">Prior <input type="range" id="prior" min="-4" max="0" step="0.1" value="-2.2"></label>
+    <span class="mono" id="prior-o"></span>
+    <label for="temp">Temperature <input type="range" id="temp" min="0.5" max="3" step="0.05" value="1"></label>
+    <span class="mono" id="temp-o"></span>
+    <button class="btn" id="reset">Reset behaviour</button>
+  </div>
+  <p class="cap">The prior is where you start before any evidence: &minus;2.2 log-odds is about 10%
+  agents, which is roughly what a public site sees. Temperature does the same job as on the previous
+  note &mdash; it moves the confidence without reordering anything.</p>
+</section>
+
+<section class="card">
+  <div class="card-top"><h2>The evidence</h2><span class="tag">auditable, not a black box</span></div>
+  <p class="note">Every signal, what it observed, and what it contributed in log-odds. Positive pushes
+  toward agent, negative toward human, and the total goes through a sigmoid. This is naive Bayes:
+  weights are <b>hand-set likelihood ratios, not fitted</b>, and the page says so rather than dressing
+  them up as a trained model. Fit them on your own labelled traffic and they get better.</p>
+  <p class="note">One correction the naive version needs. These signals are <b>not independent</b>:
+  a single stealth plugin clears the whole automation-surface group at once, so adding up the evidence
+  from each absent signal counts one fact eight times and can drown out a flag that actually fired.
+  The negative side is capped at &minus;1.2 log-odds for that reason. Without the cap a live
+  <code>navigator.webdriver</code> on an otherwise tidy browser scored 22%, which is nonsense — nothing
+  real sets that flag.</p>
+  <div class="scroller"><table class="sig" id="tbl"></table></div>
+</section>
+
+<section class="card">
+  <div class="card-top"><h2>Measured against a real one</h2><span class="tag">Playwright, headless Chromium 1243</span></div>
+  <p class="note">Driven by Playwright against headless Chromium, this page scores <b>100.0%</b> at
+  a total of <b>10.45</b> log-odds. Five signals fire, and the observations are the ones the table
+  above describes rather than anything hypothetical:</p>
+  <div class="scroller"><table class="sig">
+    <thead><tr><th>Signal</th><th>Observed</th><th style="text-align:right">Weight</th></tr></thead>
+    <tbody>
+      <tr class="fired"><td class="name">&#9679; navigator.webdriver</td><td class="obs">true</td><td class="w">+4.5</td></tr>
+      <tr class="fired"><td class="name">&#9679; Headless token in UA</td><td class="obs">HeadlessChrome</td><td class="w">+4.0</td></tr>
+      <tr class="fired"><td class="name">&#9679; Empty plugin list on desktop</td><td class="obs">0 plugins</td><td class="w">+1.3</td></tr>
+      <tr class="fired"><td class="name">&#9679; UA says Chrome, window.chrome absent</td><td class="obs">missing</td><td class="w">+1.7</td></tr>
+      <tr class="fired"><td class="name">&#9679; Software rasterizer</td><td class="obs">ANGLE (Google, Vulkan 1.3.0 (SwiftShader&hellip;</td><td class="w">+2.3</td></tr>
+      <tr class="clear"><td class="name">&#9675; Driver artifacts on window</td><td class="obs">none &mdash; Playwright leaves no cdc_ keys, that is Selenium</td><td class="w">&ndash;</td></tr>
+      <tr class="clear"><td class="name">&#9675; Zero-sized screen or window</td><td class="obs">1280x720</td><td class="w">&ndash;</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:1rem">Then the interesting half. Scripting a curved mouse path
+  across the page and typing with realistic key delays &mdash; the behavioural half done properly
+  &mdash; moved the score <b>not at all</b>. It stayed at 100%, because none of the five signals that
+  fired are behavioural. <b>Mimicking a human is wasted effort while the environment still announces
+  itself</b>, which is also why the patch-the-environment stealth plugins exist and why the
+  behavioural signals only start earning their weight once those are gone.</p>
+  <p class="cap">Measured on this page, not quoted: Playwright 1.63, headless Chromium build 1243,
+  default launch options, served over localhost. A stealth-patched browser would clear most of the
+  first group and land far lower.</p>
+</section>
+
+<section class="card">
+  <div class="card-top"><h2>Why this is a speed bump and not a wall</h2></div>
+  <p class="note"><b>Every signal here is client-side, and anything client-side can lie.</b>
+  <code>navigator.webdriver</code> is one line to patch, and the stealth plugins that ship with every
+  scraping stack patch all of the environmental checks by default. What survives patching is the
+  behavioural half, because faking plausible mouse curvature and dwell time costs real effort — and
+  even that is only expensive, not impossible.</p>
+  <p class="note"><b>So do not block on it.</b> A hard block on a client-side score fails closed on
+  exactly the people you did not mean to hit: privacy browsers, screen readers and other assistive
+  tooling, machines with the GPU disabled, old devices, anyone with JavaScript partly broken. The
+  defensible uses are rate-limiting, asking for a challenge, pricing a request differently, or simply
+  logging the score and looking at the distribution later.</p>
+  <p class="note"><b>Real systems put this in the middle, not at the front.</b> Server-side signals do
+  the heavy lifting — IP and ASN reputation, TLS and HTTP/2 fingerprints, request timing and ordering,
+  account age. A client-side score is one more input, valuable because it is cheap and because it sees
+  things the server cannot, not because it is hard to beat.</p>
+  <div class="warnbox"><b>A note on what this page is for.</b> Detecting automated traffic so you can
+  rate-limit or challenge it is ordinary defensive work, and that is the use this is written for. It
+  is deliberately not an evasion guide: every check here is well known and documented in the open, and
+  the page is more useful as an argument for where detection belongs in a stack than as a detector on
+  its own.</div>
+</section>
+
+<a class="backlink" href="/">&#8592; All notes</a>
+
+<footer class="site">
+  Signals are read once on load, plus behavioural observation while the page is open. Nothing is sent
+  anywhere: the score is computed in your tab and never leaves it. Weights are hand-set log-odds and
+  are not fitted on labelled traffic; treat the numbers as an illustration of the method rather than a
+  benchmark.<br>
+  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a>
+</footer>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------------------------------------------------------------------
+   Naive Bayes over independent-ish signals. Each weight is a log
+   likelihood ratio: how many nats of evidence seeing this is worth.
+   Hand-set, stated as hand-set. Fit them on your own traffic and they
+   stop being guesses.                                                   */
+
+var UA = navigator.userAgent || '';
+var claimsChrome = /Chrome\//.test(UA) && !/Edg\//.test(UA);
+var isMobileUA = /Android|iPhone|iPad|Mobile/.test(UA);
+
+function glRenderer(){
+  try{
+    var c = document.createElement('canvas');
+    var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if(!gl) return null;
+    var dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    if(!dbg) return 'hidden';
+    return String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '');
+  }catch(e){ return null; }
+}
+function driverKeys(){
+  var pat = /^(cdc_|\$cdc|__webdriver|__selenium|__fxdriver|__driver|__playwright|__puppeteer|__nightmare|_phantom|callPhantom)/;
+  var hits = [];
+  try{ for(var k in window) if(pat.test(k)) hits.push(k); }catch(e){}
+  try{ Object.getOwnPropertyNames(document).forEach(function(k){
+        if(/^\$?cdc_|^__webdriver/.test(k)) hits.push('document.'+k); }); }catch(e){}
+  return hits;
+}
+
+/* behaviour, gathered while the page is open */
+var B = { moves:0, path:0, disp:0, keys:0, firstAt:null, untrusted:false,
+          clickNoMove:false, lastX:null, lastY:null, sx:null, sy:null, typedNoKey:false };
+var T0 = performance.now();
+
+function onMove(e){
+  if(!B.firstAt) B.firstAt = performance.now()-T0;
+  if(!e.isTrusted) B.untrusted = true;
+  if(B.lastX !== null){
+    var dx = e.clientX-B.lastX, dy = e.clientY-B.lastY;
+    B.path += Math.sqrt(dx*dx+dy*dy);
+  } else { B.sx = e.clientX; B.sy = e.clientY; }
+  B.lastX = e.clientX; B.lastY = e.clientY;
+  if(B.sx !== null){
+    var ex = e.clientX-B.sx, ey = e.clientY-B.sy;
+    B.disp = Math.sqrt(ex*ex+ey*ey);
+  }
+  B.moves++;
+  render();
+}
+function onKey(e){
+  if(!B.firstAt) B.firstAt = performance.now()-T0;
+  if(!e.isTrusted) B.untrusted = true;
+  B.keys++; render();
+}
+function onClick(e){
+  if(!B.firstAt) B.firstAt = performance.now()-T0;
+  if(!e.isTrusted) B.untrusted = true;
+  if(B.moves === 0) B.clickNoMove = true;
+  render();
+}
+addEventListener('mousemove', onMove, {passive:true});
+addEventListener('pointermove', onMove, {passive:true});
+addEventListener('keydown', onKey, {passive:true});
+addEventListener('click', onClick, {passive:true});
+$('typ').addEventListener('input', function(){
+  if(this.value.length > 0 && B.keys === 0) B.typedNoKey = true;
+  render();
+});
+
+/* each signal returns {v:boolean|null, o:string} — null means not yet known */
+var SIGNALS = [
+  {g:'Automation surface'},
+  { n:'navigator.webdriver', w:4.5, f:function(){
+      var v = navigator.webdriver === true;
+      return {v:v, o:String(navigator.webdriver)};
+    }},
+  { n:'Headless token in UA', w:4.0, f:function(){
+      var v = /Headless/i.test(UA);
+      return {v:v, o:v ? 'HeadlessChrome' : 'absent'};
+    }},
+  { n:'Driver artifacts on window', w:4.0, f:function(){
+      var h = driverKeys();
+      return {v:h.length>0, o:h.length ? h.slice(0,2).join(', ') : 'none'};
+    }},
+  { n:'Empty plugin list on desktop', w:1.3, f:function(){
+      if(isMobileUA) return {v:null, o:'n/a on mobile'};
+      var n = (navigator.plugins && navigator.plugins.length) || 0;
+      return {v:claimsChrome && n===0, o:n+' plugins'};
+    }},
+  { n:'No navigator.languages', w:2.1, f:function(){
+      var l = navigator.languages;
+      return {v:!l || l.length===0, o:l ? '['+l.slice(0,3).join(', ')+']' : 'undefined'};
+    }},
+  { n:'UA says Chrome, window.chrome absent', w:1.7, f:function(){
+      if(!claimsChrome) return {v:null, o:'UA is not Chrome'};
+      return {v:!window.chrome, o:window.chrome ? 'present' : 'missing'};
+    }},
+
+  {g:'Rendering environment'},
+  { n:'Software rasterizer', w:2.3, f:function(){
+      var r = glRenderer();
+      if(r === null) return {v:true, o:'no WebGL context'};
+      if(r === 'hidden') return {v:null, o:'renderer masked'};
+      return {v:/SwiftShader|llvmpipe|Software|OffScreen/i.test(r), o:r.slice(0,42)};
+    }},
+  { n:'Zero-sized screen or window', w:2.6, f:function(){
+      var bad = screen.width===0 || screen.height===0 || outerWidth===0;
+      return {v:bad, o:screen.width+'x'+screen.height+' / outer '+outerWidth};
+    }},
+  { n:'No touch on a mobile UA', w:1.4, f:function(){
+      if(!isMobileUA) return {v:null, o:'n/a on desktop'};
+      return {v:!('ontouchstart' in window) && navigator.maxTouchPoints===0, o:'maxTouchPoints '+navigator.maxTouchPoints};
+    }},
+
+  {g:'Behaviour'},
+  { n:'Untrusted events seen', w:4.0, f:function(){
+      return {v:B.untrusted, o:B.untrusted ? 'isTrusted false' : 'all trusted'};
+    }},
+  { n:'Interaction with no pointer movement', w:1.9, f:function(){
+      if(B.keys===0 && B.moves===0) return {v:null, o:'no interaction yet'};
+      return {v:B.clickNoMove || (B.keys>0 && B.moves===0), o:B.moves+' moves, '+B.keys+' keys'};
+    }},
+  { n:'Text appeared without keystrokes', w:2.8, f:function(){
+      if($('typ').value.length===0) return {v:null, o:'field empty'};
+      return {v:B.typedNoKey, o:B.typedNoKey ? 'value set programmatically' : 'keys observed'};
+    }},
+  { n:'Pointer path is a straight line', w:1.6, f:function(){
+      if(B.moves < 8) return {v:null, o:B.moves+' samples, need 8'};
+      var ratio = B.disp>0 ? B.path/B.disp : 1;
+      return {v:ratio < 1.03, o:'path/displacement '+ratio.toFixed(2)};
+    }},
+  { n:'Acted implausibly fast', w:1.2, f:function(){
+      if(B.firstAt === null) return {v:null, o:'nothing yet'};
+      return {v:B.firstAt < 120, o:'first event at '+B.firstAt.toFixed(0)+'ms'};
+    }}
+];
+
+function evaluate(){
+  var prior = +$('prior').value, T = +$('temp').value;
+  var pos = 0, neg = 0, rows = [], fired = [], pending = 0;
+  SIGNALS.forEach(function(s){
+    if(s.g){ rows.push({g:s.g}); return; }
+    var r;
+    try{ r = s.f(); }catch(e){ r = {v:null, o:'unavailable'}; }
+    var c = r.v === true ? s.w : (r.v === false ? -Math.min(0.30, s.w*0.12) : 0);
+    if(r.v === null) pending++;
+    if(c > 0) pos += c; else neg += c;
+    if(r.v === true) fired.push(s.n);
+    rows.push({n:s.n, w:s.w, v:r.v, o:r.o, c:c});
+  });
+  /* These signals are not independent: one stealth plugin clears most of them
+     at once, so summing the absence evidence counts the same fact many times
+     over. Cap the negative side. Naive Bayes is naive about exactly this. */
+  var NEG_FLOOR = -1.2;
+  var capped = Math.max(neg, NEG_FLOOR);
+  var logit = prior + pos + capped;
+  return {p:1/(1+Math.exp(-logit/T)), logit:logit, rows:rows, fired:fired,
+          pending:pending, pos:pos, neg:neg, capped:capped};
+}
+
+function render(){
+  var e = evaluate();
+  $('p').textContent = (e.p*100).toFixed(1) + '%';
+  var cls = e.p >= 0.75 ? 'agent' : (e.p >= 0.35 ? 'unsure' : 'human');
+  $('p').style.color = cls==='agent' ? 'var(--brick)' : cls==='unsure' ? 'var(--spec)' : 'var(--good)';
+  $('pill').className = 'pill ' + cls;
+  $('pill').textContent = cls==='agent' ? 'likely an agent' : cls==='unsure' ? 'undecided' : 'likely a person';
+  $('say').innerHTML = e.fired.length
+    ? 'Fired: <b>' + e.fired.join('</b>, <b>') + '</b>. Each one is listed below with what it saw.'
+    : 'Nothing has fired. Every check that can run has come back looking like a person, and ' +
+      (e.pending ? '<b>' + e.pending + '</b> are still waiting on evidence.' : 'none are still waiting.');
+  $('sum').innerHTML = 'log-odds <b>' + e.logit.toFixed(2) + '</b> = prior ' +
+    (+$('prior').value).toFixed(1) + ' + evidence ' + e.pos.toFixed(2) + ' &minus; ' +
+    Math.abs(e.capped).toFixed(2) +
+    (e.neg < e.capped ? ' <span style="color:var(--spec)">(capped from ' + Math.abs(e.neg).toFixed(2) + ')</span>' : '') +
+    ' &middot; T ' + (+$('temp').value).toFixed(2) + ' &middot; ' + e.pending + ' pending';
+  $('phase').textContent = e.pending ? 'collecting' : 'all signals in';
+  $('prior-o').textContent = 'base rate ' + (1/(1+Math.exp(-(+$('prior').value)))*100).toFixed(0) + '%';
+  $('temp-o').textContent = 'T = ' + (+$('temp').value).toFixed(2);
+
+  $('tbl').innerHTML =
+    '<thead><tr><th>Signal</th><th>Observed</th><th style="text-align:right">Weight</th>' +
+    '<th style="text-align:right">Contribution</th></tr></thead><tbody>' +
+    e.rows.map(function(r){
+      if(r.g) return '<tr class="grp"><td colspan="4">' + r.g + '</td></tr>';
+      var klass = r.v === true ? 'fired' : r.v === false ? 'clear' : 'pending';
+      var mark = r.v === true ? '&#9679; ' : r.v === false ? '&#9675; ' : '&#9671; ';
+      return '<tr class="' + klass + '"><td class="name">' + mark + r.n + '</td>' +
+        '<td class="obs">' + String(r.o).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</td>' +
+        '<td class="w">' + (r.v===null ? '&ndash;' : '+' + r.w.toFixed(1)) + '</td>' +
+        '<td class="w">' + (r.c === 0 ? '0' : (r.c>0?'+':'') + r.c.toFixed(2)) + '</td></tr>';
+    }).join('') + '</tbody>';
+}
+
+$('prior').addEventListener('input', render);
+$('temp').addEventListener('input', render);
+$('reset').addEventListener('click', function(){
+  B = { moves:0, path:0, disp:0, keys:0, firstAt:null, untrusted:false,
+        clickNoMove:false, lastX:null, lastY:null, sx:null, sy:null, typedNoKey:false };
+  T0 = performance.now(); $('typ').value = ''; render();
+});
+
+render();
+window.__agentScore = function(){ var e = evaluate(); return {p:e.p, logit:e.logit, fired:e.fired, pending:e.pending}; };
+})();
+</script>
+
+<script>
+// GoatCounter: cookieless page counts, no personal data, no consent banner.
+// Production host only, so local previews are not counted.
+if (location.hostname === "swalla02.github.io") {
+  var gc = document.createElement("script");
+  gc.async = true;
+  gc.src = "//gc.zgo.at/count.js";
+  gc.setAttribute("data-goatcounter", "https://swalla02.goatcounter.com/count");
+  document.head.appendChild(gc);
+}
+</script>
+</body>
+</html>
