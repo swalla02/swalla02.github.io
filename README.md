@@ -3,6 +3,7 @@
 Static site, no build step. Every page is self-contained HTML.
 
 - `/` landing
+- `/agent-detection/` Is This Visitor an Agent? — client-side signal scoring
 - `/client-side-decisions/` A Decision Model in 23 Megabytes — runs a real encoder client-side
 - `/decision-architectures/` Four Ways to Not Generate Text — interactive
 - `/jev-economics/` What Jev's Price Card Implies
