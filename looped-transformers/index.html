@@ -1,0 +1,1287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Looped Transformers</title>
+<meta name="description" content="How looped transformers reuse one block of layers many times, what that extra depth buys in reasoning, and why it saves memory but not latency: a 3.5B looped model runs like a 53B one.">
+<link rel="canonical" href="https://swalla02.github.io/looped-transformers/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="Looped Transformers">
+<meta property="og:description" content="Run the same block of layers again and again. Build one, watch it reason hop by hop, and price it on an H100: it stores like a 3.5B model and runs like a 53B one.">
+<meta property="og:url" content="https://swalla02.github.io/looped-transformers/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Looped Transformers">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Looped Transformers">
+<meta name="twitter:description" content="Run the same block of layers again and again. Build one, watch it reason hop by hop, and price it on an H100: it stores like a 3.5B model and runs like a 53B one.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-calculator.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F3; --surface:#FBFCFB; --sunk:#E8ECEA;
+  --ink:#111B1C; --ink-soft:#3D4E4E; --muted:#5E7070;
+  --rule:#D3DBD9; --rule-soft:#E2E8E6;
+  --loop:#0E7C86;  --loop-wash:#0E7C861C;   /* the shared block */
+  --edge:#4C5C86;  --edge-wash:#4C5C861C;   /* prelude, coda, unshared layers */
+  --inj:#C2711A;   --inj-wash:#C2711A20;    /* input injection, cost */
+  --warn:#A24A38;  --warn-wash:#A24A381C;
+  --ok:#1F7350;    --ok-wash:#1F73501C;
+
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --frame:1020px; --measure:37rem; --wide:920px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0C1416; --surface:#121D1F; --sunk:#182628;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1A2A2C;
+  --loop:#4FD4CB;  --loop-wash:#4FD4CB1F;
+  --edge:#8FA0CC;  --edge-wash:#8FA0CC24;
+  --inj:#E5A54E;   --inj-wash:#E5A54E24;
+  --warn:#DE8B77;  --warn-wash:#DE8B7720;
+  --ok:#57C68F;    --ok-wash:#57C68F1C;
+}}
+:root[data-theme="dark"]{
+  --ground:#0C1416; --surface:#121D1F; --sunk:#182628;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1A2A2C;
+  --loop:#4FD4CB;  --loop-wash:#4FD4CB1F;
+  --edge:#8FA0CC;  --edge-wash:#8FA0CC24;
+  --inj:#E5A54E;   --inj-wash:#E5A54E24;
+  --warn:#DE8B77;  --warn-wash:#DE8B7720;
+  --ok:#57C68F;    --ok-wash:#57C68F1C;
+}
+
+*{box-sizing:border-box;}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--body);font-size:1.0625rem;line-height:1.66;-webkit-font-smoothing:antialiased;}
+.frame{max-width:var(--frame);margin:0 auto;padding:0 1.5rem;}
+@media (max-width:520px){.frame{padding:0 1rem;}}
+.col{max-width:var(--measure);margin-inline:auto;}
+
+/* masthead */
+header.top{border-bottom:1px solid var(--rule);background:var(--surface);}
+.top .frame{display:flex;gap:1rem;align-items:center;justify-content:space-between;padding-block:.8rem;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:.7rem;min-width:0;}
+.mark{display:block;width:30px;height:30px;flex:0 0 30px;border-radius:3px;
+  background:url(/assets/robot.png) center/cover;}
+.kicker{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);}
+.legend-mini{display:flex;gap:.9rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+.legend-mini span{display:flex;align-items:center;gap:.35rem;}
+.legend-mini i{width:9px;height:9px;border-radius:2px;display:block;}
+.sw-l{background:var(--loop);} .sw-e{background:var(--edge);} .sw-i{background:var(--inj);}
+.backlink{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--mono);color:var(--loop);
+  font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;}
+.backlink:hover{text-decoration:underline;}
+
+/* hero */
+.hero{padding:4rem 0 2.4rem;}
+.eyebrow{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--loop);margin:0 0 1.3rem;}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(2.5rem,7.5vw,4.4rem);
+  line-height:.94;letter-spacing:-.035em;margin:0 0 1.4rem;text-wrap:balance;}
+.standfirst{font-size:1.22rem;line-height:1.52;color:var(--ink-soft);margin:0;text-wrap:pretty;}
+
+main{padding:1rem 0;}
+h2{font-family:var(--display);font-weight:700;font-size:1.6rem;line-height:1.18;
+  letter-spacing:-.02em;margin:3.4rem 0 1rem;text-wrap:balance;}
+h2 .claim{display:block;font-family:var(--mono);font-size:.66rem;font-weight:500;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem;}
+p{margin:0 0 1.1rem;}
+a{color:var(--loop);text-decoration-thickness:1px;text-underline-offset:2px;}
+strong{font-weight:600;}
+code{font-family:var(--mono);font-size:.85em;background:var(--sunk);padding:.1em .34em;border-radius:3px;}
+.lede{font-size:1.1rem;}
+
+/* interactive figures */
+figure{margin:2.6rem auto;max-width:var(--wide);}
+.fig-head{display:flex;gap:.7rem;align-items:baseline;margin-bottom:.65rem;flex-wrap:wrap;
+  font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;}
+.fig-num{color:var(--loop);font-weight:700;}
+.fig-name{color:var(--muted);font-weight:500;}
+.fig-live{margin-left:auto;color:var(--inj);font-weight:600;}
+.plate{background:var(--surface);border:1px solid var(--rule);border-radius:2px;padding:1.1rem 1rem 1.15rem;}
+.scroller{overflow-x:auto;}
+.plate svg{display:block;width:100%;min-width:600px;height:auto;}
+figcaption{margin-top:.7rem;font-family:var(--mono);font-size:.73rem;line-height:1.6;color:var(--muted);}
+figcaption b{color:var(--ink-soft);font-weight:500;}
+
+.ctl{display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;margin-bottom:.9rem;}
+.ctl.tight{margin-bottom:.5rem;}
+.ctl label{font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;color:var(--muted);
+  display:flex;align-items:center;gap:.5rem;}
+.ctl input[type=range]{width:120px;accent-color:var(--loop);}
+.ctl select{font:inherit;font-family:var(--mono);font-size:.7rem;color:var(--ink);background:var(--surface);
+  border:1px solid var(--rule);border-radius:2px;padding:.3rem .4rem;}
+.ctl input[type=checkbox]{accent-color:var(--loop);}
+.readout{font-family:var(--mono);font-size:.76rem;font-weight:600;color:var(--ink);
+  font-variant-numeric:tabular-nums;min-width:2.2ch;display:inline-block;}
+.seg{display:inline-flex;gap:3px;flex-wrap:wrap;}
+.btn{font:inherit;font-family:var(--mono);font-size:.66rem;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;cursor:pointer;background:var(--ink);color:var(--ground);
+  border:1px solid var(--ink);border-radius:2px;padding:.45rem .8rem;transition:opacity .15s;}
+.btn:hover{opacity:.82;}
+.btn.ghost{background:none;color:var(--muted);border-color:var(--rule);}
+.btn.ghost[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);background:var(--sunk);}
+.ctl .grp{font-family:var(--mono);font-size:.6rem;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:2px;margin-top:.9rem;overflow:hidden;}
+.stat{background:var(--surface);padding:.7rem .8rem;display:flex;flex-direction:column;gap:.15rem;}
+.stat .k{font-family:var(--mono);font-size:.58rem;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);}
+.stat .v{font-family:var(--display);font-weight:700;font-size:1.35rem;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.15;}
+.stat .s{font-family:var(--mono);font-size:.64rem;color:var(--muted);}
+.v-loop{color:var(--loop);} .v-edge{color:var(--edge);} .v-inj{color:var(--inj);} .v-warn{color:var(--warn);}
+
+.note{margin-top:.8rem;font-size:.93rem;line-height:1.55;color:var(--ink-soft);}
+.note b{color:var(--ink);font-weight:600;}
+.verdict{margin-top:.8rem;padding:.65rem .8rem;border-radius:2px;background:var(--sunk);
+  font-size:.93rem;line-height:1.5;color:var(--ink-soft);border-left:2px solid var(--rule);}
+.verdict b{color:var(--ink);font-weight:600;}
+.verdict.ok{background:var(--ok-wash);border-left-color:var(--ok);}
+.verdict.no{background:var(--warn-wash);border-left-color:var(--warn);}
+
+/* variant picker */
+.picker{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:.9rem;}
+@media (max-width:760px){.picker{grid-template-columns:repeat(2,1fr);}}
+.tab{text-align:left;cursor:pointer;font:inherit;color:inherit;background:var(--surface);
+  border:1px solid var(--rule);border-radius:3px;padding:.7rem .8rem;display:grid;gap:.2rem;
+  transition:border-color .15s,background .15s;}
+.tab:hover{border-color:var(--muted);}
+.tab .who{font-family:var(--mono);font-size:.58rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);}
+.tab .nm{font-family:var(--display);font-weight:700;font-size:.98rem;letter-spacing:-.018em;line-height:1.2;}
+.tab[aria-selected="true"]{background:var(--loop-wash);border-color:var(--loop);}
+.tab[aria-selected="true"] .nm{color:var(--loop);}
+
+/* reading guides, stop-rule cards, the prompt listing */
+.howto{margin:0 0 .9rem;font-size:.93rem;line-height:1.55;color:var(--ink-soft);padding:.7rem .85rem;
+  background:var(--sunk);border-radius:2px;}
+.howto b{color:var(--ink);font-weight:600;}
+.howto p{margin:0 0 .5rem;} .howto p:last-child{margin:0;}
+.rule{display:grid;grid-template-columns:8.5rem 1fr;gap:.4rem 1rem;margin:0 0 .9rem;padding:.8rem .95rem;
+  border:1px solid var(--rule);border-left:3px solid var(--loop);border-radius:2px;background:var(--surface);}
+@media (max-width:560px){.rule{grid-template-columns:1fr;gap:.1rem;} .rule dd{margin-bottom:.45rem;}}
+.rule dt{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--loop);padding-top:.22rem;}
+.rule dd{margin:0;font-size:.93rem;line-height:1.5;color:var(--ink-soft);}
+.rule dd b{color:var(--ink);font-weight:600;}
+.shade-note{font-family:var(--mono);font-size:.68rem;line-height:1.5;color:var(--muted);margin:.45rem 0 0;}
+.prog{font-family:var(--mono);font-size:.78rem;display:flex;flex-wrap:wrap;gap:.35rem .45rem;margin:0 0 .6rem;
+  padding:.65rem .75rem;background:var(--sunk);border-radius:2px;align-items:center;}
+.prog .q{flex-basis:100%;color:var(--muted);font-size:.64rem;letter-spacing:.08em;margin-bottom:.15rem;}
+.prog .ln{padding:.12rem .45rem;border-radius:2px;background:var(--surface);border:1px solid var(--rule);color:var(--ink-soft);}
+.prog .ln.s{border-color:var(--inj);border-width:2px;}
+.prog .ln.used{border-color:var(--loop);background:var(--loop-wash);color:var(--ink);}
+.prog .ln.chg{background:var(--inj-wash);}
+.prog .ln.val{font-weight:600;}
+
+/* calculator charts and table */
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:1rem;}
+@media (max-width:700px){.charts{grid-template-columns:1fr;}}
+.plate .charts svg{min-width:0;}
+.cmp{margin-top:.9rem;border:1px solid var(--rule);border-radius:2px;overflow-x:auto;background:var(--surface);}
+.cmp table{border-collapse:collapse;width:100%;min-width:480px;font-variant-numeric:tabular-nums;}
+.cmp th,.cmp td{padding:.42rem .8rem;border-bottom:1px solid var(--rule-soft);vertical-align:bottom;}
+.cmp tr:last-child td,.cmp tr:last-child th{border-bottom:none;}
+.cmp thead th{text-align:right;border-bottom:1px solid var(--rule);padding-block:.7rem .55rem;}
+.cmp thead .h{display:block;font-family:var(--display);font-weight:700;font-size:.98rem;letter-spacing:-.015em;line-height:1.2;}
+.cmp thead .shape{display:block;font-family:var(--mono);font-size:.6rem;font-weight:400;color:var(--muted);margin-top:.15rem;}
+.cmp tbody th{text-align:left;font-family:var(--mono);font-size:.64rem;font-weight:400;letter-spacing:.05em;color:var(--muted);white-space:nowrap;}
+.cmp td{text-align:right;font-family:var(--mono);font-size:.8rem;font-weight:600;color:var(--ink);white-space:nowrap;}
+.cmp td.bad{color:var(--warn);} .cmp td.good{color:var(--ok);}
+@media (max-width:520px){
+  .cmp table{min-width:0;}
+  .cmp th,.cmp td{padding:.4rem .4rem;}
+  .cmp tbody th{white-space:normal;font-size:.6rem;}
+  .cmp td{font-size:.72rem;}
+  .cmp thead .h{font-size:.8rem;}
+}
+.c-loop .h{color:var(--loop);} .c-deep .h{color:var(--edge);} .c-small .h{color:var(--muted);}
+
+/* svg primitives */
+.d-lbl{font-family:var(--mono);font-size:12px;font-weight:500;fill:var(--ink);}
+.d-sm{font-family:var(--mono);font-size:10.5px;font-weight:400;fill:var(--muted);}
+.d-tag{font-family:var(--mono);font-size:9.5px;font-weight:600;fill:var(--muted);letter-spacing:.09em;}
+.d-tok{font-family:var(--body);font-size:14px;fill:var(--ink);}
+.d-line{stroke:var(--ink-soft);stroke-width:1.25;fill:none;}
+.d-rule{stroke:var(--rule);stroke-width:1;fill:none;}
+.d-grid{stroke:var(--rule-soft);stroke-width:1;}
+.d-box{fill:var(--surface);stroke:var(--rule);stroke-width:1.2;}
+.d-sunk{fill:var(--sunk);stroke:var(--rule);stroke-width:1;}
+.f-loop{fill:var(--loop);} .f-edge{fill:var(--edge);} .f-inj{fill:var(--inj);}
+.f-warn{fill:var(--warn);} .f-ok{fill:var(--ok);} .f-ink{fill:var(--ink);} .f-surface{fill:var(--surface);}
+.w-loop{fill:var(--loop-wash);} .w-edge{fill:var(--edge-wash);} .w-inj{fill:var(--inj-wash);}
+.w-warn{fill:var(--warn-wash);} .w-ok{fill:var(--ok-wash);}
+.s-loop{stroke:var(--loop);stroke-width:2;fill:none;}
+.s-edge{stroke:var(--edge);stroke-width:2;fill:none;}
+.s-inj{stroke:var(--inj);stroke-width:1.6;fill:none;}
+.s-warn{stroke:var(--warn);stroke-width:1.6;fill:none;}
+.s-muted{stroke:var(--muted);stroke-width:1.4;fill:none;}
+
+/* prose furniture */
+.math{margin:1.6rem 0;padding:1.1rem 1.2rem;background:var(--surface);
+  border:1px solid var(--rule);border-left:2px solid var(--loop);border-radius:2px;
+  font-family:var(--mono);font-size:.82rem;line-height:1.95;overflow-x:auto;}
+.math .lbl{display:block;font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:.45rem;}
+.math .hi{color:var(--loop);font-weight:700;}
+ol.steps{list-style:none;counter-reset:s;padding:0;margin:1.8rem 0;display:grid;gap:.9rem;}
+ol.steps li{counter-increment:s;position:relative;padding-left:2.6rem;}
+ol.steps li::before{content:counter(s);position:absolute;left:0;top:.15rem;
+  font-family:var(--mono);font-size:.7rem;font-weight:700;color:var(--loop);
+  background:var(--loop-wash);border-radius:3px;width:1.7rem;height:1.5rem;display:grid;place-items:center;}
+.pull{margin:2.2rem 0;padding:1.2rem 0 1.2rem 1.35rem;border-left:2px solid var(--inj);
+  font-family:var(--display);font-weight:600;font-size:1.28rem;line-height:1.36;
+  letter-spacing:-.015em;text-wrap:pretty;}
+.ledger{margin:1.8rem 0;border:1px solid var(--rule);border-radius:2px;overflow:hidden;background:var(--rule);display:grid;gap:1px;}
+.ledger div{background:var(--surface);padding:.85rem 1rem;display:grid;grid-template-columns:7.5rem 1fr;gap:.2rem 1rem;}
+@media (max-width:520px){.ledger div{grid-template-columns:1fr;}}
+.ledger .who{font-family:var(--mono);font-size:.64rem;font-weight:600;letter-spacing:.06em;color:var(--loop);}
+.ledger p{margin:0;font-size:.94rem;line-height:1.55;color:var(--ink-soft);}
+.ledger p b{color:var(--ink);font-weight:600;}
+.risks{display:grid;gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:2px;margin:1.9rem 0;overflow:hidden;}
+.risk{background:var(--surface);padding:1rem 1.15rem;}
+.risk h3{margin:0 0 .35rem;font-family:var(--mono);font-size:.7rem;font-weight:700;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--warn);}
+.risk p{margin:0;font-size:.94rem;line-height:1.55;color:var(--ink-soft);}
+
+footer{border-top:1px solid var(--rule);margin-top:4rem;padding:2rem 0 3.4rem;
+  font-family:var(--mono);font-size:.72rem;line-height:1.85;color:var(--muted);}
+footer a{color:var(--loop);}
+:focus-visible{outline:2px solid var(--loop);outline-offset:3px;}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="frame">
+    <span class="brand"><span class="mark" role="img" aria-label="Site mark"></span><span class="kicker">Harness Design Notes</span></span>
+    <span class="legend-mini">
+      <span><i class="sw-l"></i>shared block</span>
+      <span><i class="sw-e"></i>unshared layers</span>
+      <span><i class="sw-i"></i>input injection</span>
+    </span>
+  </div>
+</header>
+<div class="frame" style="padding-top:1.1rem"><a class="backlink" href="/">&#8592; All notes</a></div>
+
+<div class="hero"><div class="frame"><div class="col">
+  <p class="eyebrow">Model architecture &middot; the mechanism, the arithmetic, the reasoning</p>
+  <h1>Looped Transformers</h1>
+  <p class="standfirst">Take a block of layers and run it again, and again. A looped transformer gets its depth by reusing weights instead of adding them. That helps with reasoning, saves you memory, and does nothing for your latency bill.</p>
+</div></div></div>
+
+<main><div class="frame">
+
+<div class="col">
+<p class="lede">An ordinary transformer is a stack of distinct layers. Layer 17 has its own weights, used once per token and never again. A <strong>looped</strong> transformer takes a short block of layers and applies it <code>r</code> times in a row, feeding the output of one pass back in as the input to the next. Depth goes up by the size of the block each time round. The parameter count stays where it is.</p>
+
+<p>This is recurrence, but not the kind RNNs have. An RNN recurs across <em>time</em>, one token after another. A looped transformer recurs across <em>depth</em>, inside the forward pass for each token. Every position is still processed in parallel; each one just goes through the same weights more than once on the way up. Build one below. The parameter figures assume layers the width of <a href="https://arxiv.org/abs/2502.05171">Huginn-3.5B</a>, the largest openly trained model of this kind, at about 395M parameters per layer.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 1</span><span class="fig-name">Build a looped model</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="ctl tight">
+      <span class="grp">Presets</span>
+      <span class="seg" id="f1-presets">
+        <button class="btn ghost" data-preset="flat">No loop</button>
+        <button class="btn ghost" data-preset="ut">One shared layer</button>
+        <button class="btn ghost" data-preset="huginn" aria-pressed="true">Huginn-3.5B</button>
+      </span>
+      <span class="seg" id="f1-view" style="margin-left:auto">
+        <button class="btn ghost" data-view="fold" aria-pressed="true">Folded</button>
+        <button class="btn ghost" data-view="unroll">Unrolled</button>
+      </span>
+    </div>
+    <div class="ctl">
+      <label for="f1-P">prelude <input type="range" id="f1-P" min="0" max="4" value="2"><span class="readout" id="f1-Pv">2</span></label>
+      <label for="f1-k">block layers k <input type="range" id="f1-k" min="1" max="8" value="4"><span class="readout" id="f1-kv">4</span></label>
+      <label for="f1-r">loops r <input type="range" id="f1-r" min="1" max="48" value="32"><span class="readout" id="f1-rv">32</span></label>
+      <label for="f1-C">coda <input type="range" id="f1-C" min="0" max="4" value="2"><span class="readout" id="f1-Cv">2</span></label>
+      <span class="seg" id="f1-inj" role="group" aria-label="Input injection">
+        <button class="btn ghost" data-inj="none">no injection</button>
+        <button class="btn ghost" data-inj="add">add e</button>
+        <button class="btn ghost" data-inj="concat" aria-pressed="true">concat e</button>
+      </span>
+    </div>
+    <div class="scroller"><svg id="f1-svg" viewBox="0 0 800 250" role="img" aria-label="Diagram of the looped model"></svg></div>
+    <div class="stats" id="f1-stats"></div>
+  </div>
+  <figcaption><b>Same colour, same weights.</b> Switch to the unrolled view to see what the hardware actually runs: a deep stack in which the shared block's layers recur. Parameter counts assume Huginn's layer shape (hidden size 5,280, gated MLP of 17,920) and a 65k-token vocabulary, with the concat adapter left out.</figcaption>
+</figure>
+
+<div class="col">
+<h2><span class="claim">The anatomy</span>Four parts, and why each one is there</h2>
+
+<p>The first looped transformer was the <a href="https://arxiv.org/abs/1807.03819">Universal Transformer</a> (Dehghani et al., 2018): one layer, shared across all depth, applied as many times as each position needed. Recent designs keep that idea and add three things around it. In the 2025 recurrent-depth design of <a href="https://arxiv.org/abs/2502.05171">Geiping et al.</a>, the parts are:</p>
+
+<ol class="steps">
+  <li><strong>A prelude.</strong> A few ordinary, unshared layers that turn token embeddings into a latent representation <code>e</code>. Huginn uses two.</li>
+  <li><strong>The recurrent block.</strong> <code>k</code> layers applied <code>r</code> times to a state <code>s</code>. Huginn's block is four layers. The state starts as random noise rather than as <code>e</code>, which pushes the model to treat the loop as an iterative process instead of a fixed function.</li>
+  <li><strong>Input injection.</strong> Every iteration gets <code>e</code> again, either added to the state or concatenated with it and projected back down by an adapter. Without this, a deep loop slowly forgets what it was asked. <a href="https://arxiv.org/abs/2311.12424">Yang et al.</a> found injection was what made looped models learn iterative algorithms well; Geiping et al. report that concatenation works better at scale and addition is fine for small models.</li>
+  <li><strong>A coda.</strong> A few more unshared layers that read the final state out to logits.</li>
+</ol>
+
+<p>The training recipe matters as much as the wiring. If you always train at <code>r = 32</code>, you get a model that works at 32 and nowhere else. Huginn samples <code>r</code> fresh for every step from a heavy-tailed distribution with mean 32, mostly shallow with occasional very deep runs. To keep memory under control, it backpropagates through only the last 8 iterations. The result is a model whose depth you can choose at inference time. That dial is the whole reason to build it.</p>
+
+<h2><span class="claim">Adaptive depth</span>Not every token needs the same number of loops</h2>
+
+<p>Once depth is a loop count rather than a fixed architecture, nothing forces every token to use the same count. A full stop doesn't need 32 passes; the digits of an arithmetic answer might. Something has to decide when each token is done, and four rules are in use. They differ in what they measure, when they decide, and whether the model has to be trained for them.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 2</span><span class="fig-name">Four stop rules: who gets how much depth</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="howto"><b>How to read it.</b> Each <b>column</b> is one token of the sentence. Each <b>row</b> is one pass through the shared block, first pass at the top. A <b>filled cell</b> means that token went through the block on that pass; once a token stops, the cells below it stay empty. The number under each column is how many passes that token got. Pick a rule, read its stop condition, then move the slider.</div>
+    <div class="picker" role="tablist" aria-label="Stop rule" id="f2-tabs"></div>
+    <dl class="rule" id="f2-rule"></dl>
+    <div class="ctl tight">
+      <label for="f2-dial"><span id="f2-dial-name">loops r</span> <input type="range" id="f2-dial" min="0" max="100" value="50"><span class="readout" id="f2-dialv"></span></label>
+    </div>
+    <div class="scroller"><svg id="f2-svg" viewBox="0 0 800 300" role="img" aria-label="Grid of tokens against passes"></svg></div>
+    <p class="shade-note" id="f2-shade"></p>
+    <div class="stats" id="f2-stats"></div>
+  </div>
+  <figcaption><b>An illustration, not a trained model.</b> Each token has a made-up difficulty, and each rule's measured quantity (halting score, prediction change, router score) is simulated from it. The stop conditions themselves are the ones in the papers: Graves (2016) and Dehghani et al. (2018) for ACT, Geiping et al. (2025) for the KL exit, Bae et al. (2025) for the router.</figcaption>
+</figure>
+
+<div class="col">
+<p>On paper, every rule except the first saves compute: easy tokens leave early. Whether a GPU turns that into throughput is a separate question, and the honest answer is "not by default." There are two problems.</p>
+
+<h2><span class="claim">Serving adaptive depth</span>Keeping the GPU busy when tokens stop at different times</h2>
+
+<p><strong>Problem one: the batch moves in lockstep.</strong> A GPU serves many sequences at once by stacking their current tokens into one matrix and pushing it through the block together. If one token in the batch wants 16 passes and the rest want 4, the simple approach runs 16 batch-wide passes, and for 12 of them most rows compute nothing useful. The early exits saved no time at all.</p>
+
+<p>Looped models have an escape that ordinary transformers don't. Every pass runs <em>the same weights</em>, so a token on its 2nd pass and a token on its 11th can share one matrix multiply. When a sequence's token finishes, that sequence can start its next token in the freed slot right away, without waiting for the rest of the batch.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 3</span><span class="fig-name">Lockstep batching against depth-wise refill</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="howto"><b>How to read it.</b> Each <b>row</b> is one sequence in a batch of 8 being decoded. Time runs left to right: each <b>column</b> is one batched pass through the block. Each <b>teal bar</b> is one token going through its passes, and its length is how many passes its stop rule gave it; alternating shades separate consecutive tokens. <b>Red cells</b> are slots where the GPU runs the block and the row has nothing to do.</div>
+    <div class="ctl">
+      <span class="seg" id="f3-mode" role="group" aria-label="Batching">
+        <button class="btn ghost" data-mode="lock" aria-pressed="true">lockstep</button>
+        <button class="btn ghost" data-mode="refill">depth-wise refill</button>
+      </span>
+      <button class="btn ghost" id="f3-new">New draw</button>
+    </div>
+    <div class="scroller"><svg id="f3-svg" viewBox="0 0 800 260" role="img" aria-label="Batch slots over time"></svg></div>
+    <div class="stats" id="f3-stats"></div>
+    <p class="note" id="f3-note"></p>
+  </div>
+  <figcaption><b>A simulation, not a benchmark.</b> Each token's pass count is drawn at random from 2 to 16, skewed short, the way an exit rule distributes depth. It ignores attention cost, which still differs by depth, and the missing keys and values in Fig 4.</figcaption>
+</figure>
+
+<div class="col">
+<p>This is <strong>continuous depth-wise batching</strong>, proposed with <a href="https://arxiv.org/abs/2410.20672">Relaxed Recursive Transformers</a> (Bae et al., 2024). In their simulation with ideal exits, a recursive Gemma reached 2.66&times; the throughput of the original, and 1.88&times; a baseline that already used ordinary continuous batching. Their later <a href="https://arxiv.org/abs/2507.10524">Mixture-of-Recursions</a> paper measured up to 2.06&times; throughput at 360M parameters. Only the matrix multiplies batch this neatly; attention still reads a different cache for each depth, which brings up the second problem.</p>
+
+<p><strong>Problem two: stopped tokens leave holes in the KV cache.</strong> In a transformer, a token at pass <code>d</code> attends to the keys and values every earlier token produced <em>at pass <code>d</code></em>. If an earlier token stopped at pass 3, it never produced anything for passes 4 and up. A later token on pass 6 reaches for that entry and finds nothing. There are four published ways to deal with it.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 4</span><span class="fig-name">Four ways to handle the missing keys and values</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="howto"><b>How to read it.</b> Each <b>column</b> is a token already in the context, and the rightmost is the <b>new token</b> being generated. Each <b>row</b> is a pass. A <b>solid cell</b> means that token has keys and values stored for that pass; earlier tokens stopped at different passes, so there are holes above them. The new token is now on <b>pass d</b>, and its attention needs row d from every earlier token: the outlined row. Pick a strategy to see what it actually reads.</div>
+    <div class="picker" role="tablist" aria-label="KV strategy" id="f4-tabs"></div>
+    <div class="ctl tight">
+      <label for="f4-d">new token is on pass d <input type="range" id="f4-d" min="1" max="8" value="6"><span class="readout" id="f4-dv">6</span></label>
+    </div>
+    <div class="scroller"><svg id="f4-svg" viewBox="0 0 800 260" role="img" aria-label="KV cache grid"></svg></div>
+    <div class="stats" id="f4-stats"></div>
+    <p class="note" id="f4-note"></p>
+  </div>
+  <figcaption><b>Schematic.</b> The exit depths are fixed and illustrative. "Stored" counts key/value entries across the 8 passes shown; "extra computed" counts entries that have to be produced for tokens that had already stopped.</figcaption>
+</figure>
+
+<div class="col">
+<p>None of the four is free. Copying fills every hole but brings back compute that early exit was supposed to save. Reading the deepest entry is free but stale. Per-depth caching is exact but shrinks what deep passes can see. Sharing the first pass is the cheapest and coarsest. Which one is acceptable is an empirical question about your model, so evaluate it on your own traffic rather than on the paper's benchmarks.</p>
+
+<p>Two serving rules follow from all this. Decide depth at a granularity your kernels can actually exploit: fixed-capacity routing, or refill with depth-wise batching. And budget the KV handling as part of the cost of early exit, not as a detail to fix later.</p>
+
+<h2><span class="claim">What depth buys</span>Reasoning is serial; parameters are storage</h2>
+
+<p>The case for looping is an argument about what layers are <em>for</em>. Some of what a model does is recall: facts, vocabulary, associations, and those live in parameters. The rest is computation. Composing one lookup with another, carrying a digit, following a reference to its referent: each of these is a step that has to happen after the previous one. In a transformer, steps that depend on each other inside one forward pass have to sit at different depths. A model that is 12 layers deep cannot do 40 dependent steps in one go, however wide it is.</p>
+
+<p>Looping lets you buy those steps without buying more storage. <a href="https://arxiv.org/abs/2502.17416">Saunshi et al.</a> (ICLR 2025) put it in one sentence: <em>many reasoning problems require a large depth but not necessarily many parameters.</em> They show that a <code>k</code>-layer block looped <code>L</code> times nearly matches a non-looped <code>kL</code>-layer model on addition, multi-hop induction and several language reasoning benchmarks, and they prove a looped model can simulate <code>T</code> steps of chain-of-thought with <code>T</code> loops. The figure below makes the serial argument concrete with the simplest multi-step task there is.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 5</span><span class="fig-name">One loop, one hop: resolve the variable</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="howto">
+      <p><b>The task.</b> The prompt below is a list of definitions such as <code>g = d</code>, and one variable is defined as a number. The question asks for the value of one variable, marked with an <b>orange ring</b>. In the diagram, each <b>circle is one variable</b>, which is one line of the prompt, and its grey <b>arrow points to what it is defined as</b>. The amber square is the number, where the chain ends.</p>
+      <p><b>A hop</b> is one substitution: take the variable you are holding, find its line, and replace it with the right-hand side. For a transformer that is one attention lookup. It is serial: you can't do hop 5 before you know where hop 4 landed. In this toy, <b>one pass of the loop does one hop</b>. The asked variable's own line gives the first hop for free, and the <b>teal arc</b> shows what the model currently believes it equals.</p>
+    </div>
+    <div class="ctl tight">
+      <label for="f5-p">hops to the answer <input type="range" id="f5-p" min="2" max="11" value="7"><span class="readout" id="f5-pv">7</span></label>
+      <label for="f5-r">loops allowed <input type="range" id="f5-r" min="1" max="12" value="4"><span class="readout" id="f5-rv">4</span></label>
+      <span class="seg" id="f5-mode" role="group" aria-label="What one pass does">
+        <button class="btn ghost" data-mode="hop" aria-pressed="true">one hop per pass</button>
+        <button class="btn ghost" data-mode="dbl">smarter: pointer doubling</button>
+      </span>
+    </div>
+    <div class="ctl">
+      <label for="f5-halt"><input type="checkbox" id="f5-halt"> stop early once the answer stops changing</label>
+      <span class="seg" style="margin-left:auto">
+        <button class="btn" id="f5-play">Run</button>
+        <button class="btn ghost" id="f5-step">Step</button>
+        <button class="btn ghost" id="f5-reset">Reset</button>
+        <button class="btn ghost" id="f5-new">New prompt</button>
+      </span>
+    </div>
+    <div class="prog" id="f5-prog"></div>
+    <div class="scroller"><svg id="f5-svg" viewBox="0 0 800 250" role="img" aria-label="Variables and their definitions"></svg></div>
+    <div class="verdict" id="f5-verdict"></div>
+    <div class="howto" style="margin:.8rem 0 0">
+      <p><b>"Stop early once the answer stops changing."</b> After each pass, compare the model's current answer with its answer after the previous pass. If they are the same, assume it's finished and stop, even if more loops were allowed. When the model reaches the number there is nothing left to substitute, so the next pass gives the same answer and it stops. It always spends one extra pass noticing. This is the KL rule from Fig 2 in its simplest form.</p>
+      <p><b>Pointer doubling</b> is a smarter block. On every pass, <em>every</em> line substitutes once, all in parallel: <code>g = d</code> and <code>d = l</code> become <code>g = l</code>. Each line's reach doubles (1, 2, 4, 8 hops), so a 7-hop question takes 3 passes instead of 6. Attention can do this in one layer, since each line only has to look up one other line.</p>
+    </div>
+  </div>
+  <figcaption><b>A toy algorithm in place of a trained block.</b> The point it makes holds for real models: the number of passes needed is set by the problem, not by the parameter count, so the same weights solve longer problems when you let them loop longer.</figcaption>
+</figure>
+
+<div class="col">
+<p>Three things to try. First, allow fewer loops than the question needs: the model doesn't fail loudly. It answers with a variable halfway down the chain, which is what an under-deep model does on a problem that's too long. Second, raise the loops without touching anything else. The same weights now solve it. This is the length-generalisation result of <a href="https://arxiv.org/abs/2409.15647">Fan et al.</a>: looped models trained with an adaptive number of steps extrapolate to longer inputs by looping longer at test time, where fixed-depth models stall. Third, tick "stop early" and allow plenty of loops. It stops one pass after the answer settles and hands back the unused budget.</p>
+
+<p>The empirical record so far fits the argument:</p>
+</div>
+
+<div class="col">
+<div class="ledger">
+  <div><span class="who">Huginn-3.5B</span><p>Trained on 800B tokens. On GSM8K with chain-of-thought it scores <b>0% at one iteration and 42% at 32</b> (flexible match), and the authors report gains up to a compute load equivalent to a 50B-parameter model. Harder tasks keep improving with more iterations after easy ones have saturated.</p></div>
+  <div><span class="who">Ouro 1.4B / 2.6B</span><p><a href="https://arxiv.org/abs/2510.25741">Zhu et al.</a> pre-trained looped models on 7.7T tokens and report that they <b>match models up to 12B</b> across a range of benchmarks. Their controlled experiments credit better <em>manipulation</em> of knowledge, not more knowledge stored.</p></div>
+  <div><span class="who">Tiny Recursive Model</span><p><a href="https://arxiv.org/abs/2510.04871">Jolicoeur-Martineau</a>: a single 2-layer network recursed many times. <b>7M parameters, 45% on ARC-AGI-1 and 8% on ARC-AGI-2</b>, ahead of most of the LLMs it was compared with on those puzzles.</p></div>
+  <div><span class="who">The limit</span><p>Saunshi et al. find looped models <b>lag on memorisation-heavy tasks</b> such as closed-book QA, where non-looped models with more parameters win. Loops add thinking time. They add nothing to what the model knows.</p></div>
+</div>
+
+<div class="pull">Parameters are where a model keeps what it knows. Depth is how many steps it gets to think about it. Looping buys only the second.</div>
+
+<h2><span class="claim">The arithmetic</span>It stores like a 3.5B model and runs like a 53B one</h2>
+
+<p>This is where the free lunch ends. Recall from <a href="/speculative-decoding/">Speculative Decoding</a> that generating a token is limited by memory bandwidth: the GPU has to stream every weight it uses out of HBM for each decode step. A looped model uses the same weights many times, so you might hope it reads them once and then works from on-chip memory.</p>
+
+<p>It doesn't, because they don't fit. An H100 has 50 MB of L2 cache. One Huginn layer is about 0.8 GB in 16-bit. So every iteration streams the block's weights out of HBM again, exactly as a model with distinct layers would stream its own. Count the bytes moved and the FLOPs done for one token, and a looped model at <code>r</code> iterations matches an unshared model with the same effective depth, term for term. Looping at <code>r = 32</code> gives Huginn 132 layer evaluations per token, and an unshared 132-layer model at that width has about 53B parameters. Geiping et al. put the same comparison at about 50B.</p>
+
+<div class="math">
+  <span class="lbl">Per layer, hidden size d, gated MLP width f</span>
+  L = 4d&sup2; + 3df &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(&#8776; 395M at Huginn's shape)<br>
+  <span class="lbl" style="margin-top:.7rem">Stored versus run, P + k + C distinct layers, E = P + k&middot;r + C evaluated</span>
+  params stored &nbsp;&nbsp;= (P + k + C)&middot;L + V&middot;d<br>
+  <span class="hi">bytes read per decode step = 2&middot;(E&middot;L + V&middot;d) + batch &middot; context &middot; 4d &middot; E</span><br>
+  KV cache stored &nbsp;= batch &middot; context &middot; 4d &middot; (P + C + k&middot;r<sub>cached</sub>)<br>
+  step time &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&#8776; max(bytes / bandwidth, FLOPs / peak)
+</div>
+
+<p>So the gain is in capacity, not speed. The weights take 7 GB instead of 105 GB, which is the difference between one GPU and a tensor-parallel group, and the freed memory can go to KV cache and larger batches. Price it yourself:</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 6</span><span class="fig-name">Serving a looped model on one H100</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="ctl">
+      <label for="f4-r">loops r <input type="range" id="f4-r" min="1" max="64" value="32"><span class="readout" id="f4-rv">32</span></label>
+      <span class="grp">batch</span>
+      <span class="seg" id="f4-b" role="group" aria-label="Batch size">
+        <button class="btn ghost" data-b="1" aria-pressed="true">1</button>
+        <button class="btn ghost" data-b="8">8</button>
+        <button class="btn ghost" data-b="32">32</button>
+        <button class="btn ghost" data-b="128">128</button>
+      </span>
+      <label for="f4-t">context
+        <select id="f4-t">
+          <option value="2048">2k</option><option value="4096" selected>4k</option>
+          <option value="8192">8k</option><option value="16384">16k</option><option value="32768">32k</option>
+        </select></label>
+      <label for="f4-kv">looped KV cache
+        <select id="f4-kv">
+          <option value="all">every iteration</option>
+          <option value="budget">budget of 4 iterations</option>
+          <option value="first">first iteration only</option>
+        </select></label>
+    </div>
+    <div class="charts">
+      <svg id="f4-lat" viewBox="0 0 400 280" role="img" aria-label="Decode step time against loop count: the looped model and the unshared model of the same depth are identical"></svg>
+      <svg id="f4-mem" viewBox="0 0 400 280" role="img" aria-label="GPU memory against loop count: the unshared model grows past one H100 while the looped model stays small"></svg>
+    </div>
+    <div class="cmp" id="f4-cmp"></div>
+    <p class="note" id="f4-note"></p>
+  </div>
+  <figcaption><b>A roofline model, not a benchmark.</b> H100 SXM: 80 GB, 3.35 TB/s, 989 dense BF16 TFLOPS, all at 100% efficiency, so real numbers will be slower in proportion. BF16 weights and cache, full multi-head attention, no weight caching across iterations. The two KV-sharing options follow Geiping et al. (a cache budget that reuses slots every few iterations) and MoR (reuse the first recursion's keys and values); both papers report small quality costs, which this model doesn't price in.</figcaption>
+</figure>
+
+<div class="col">
+<p>Look at the latency chart first: the looped line and the same-depth line are the same line. At batch 1 and 4k context, Huginn at 32 loops takes about 35 ms per token. Without the loop it would take about 2 ms. The extra 33 ms is the price of the extra thinking, and the loop gives no discount on it. What changes is memory: the 53B-equivalent no longer fits on the card, while the looped model leaves most of the card free.</p>
+
+<p>Two exceptions. A model small enough to keep its block on-chip really does avoid re-reading weights. TRM's 7M parameters take 14 MB in 16-bit and would fit in L2 several times over, and SRAM-heavy accelerators shift the line further. And KV sharing saves memory but not time: each layer evaluation still attends over the full context, so the reads remain.</p>
+
+<p>The comparison that flatters looping isn't with a deeper model. It's with <strong>chain-of-thought</strong>. Reasoning in text costs one full forward pass per thought token, and every thought sits in the KV cache for the rest of the request. Reasoning in loops costs extra depth per token, with nothing added to the context. Saunshi et al.'s result that <code>T</code> loops can simulate <code>T</code> steps of CoT is what makes that trade available, though whether the trade is good depends on how many tokens your workload's reasoning would have taken.</p>
+
+<h2><span class="claim">The risks</span>Where it bites in practice</h2>
+</div>
+
+<div class="col">
+<div class="risks">
+  <div class="risk"><h3>Latency scales with the dial</h3><p>Every loop is another pass over the block's weights. If users choose the depth, or the model halts adaptively, your latency distribution now has a tail set by the hardest prompts. Cap <code>r</code> per request and track it like any other SLO input.</p></div>
+  <div class="risk"><h3>The KV cache grows with every iteration</h3><p>Naively, each iteration's attention layers add their own keys and values: Huginn at 32 loops caches 132 layers' worth per token, as much as the 53B model would. Sharing schemes cut this sharply, but they're an approximation you have to evaluate on your own traffic.</p></div>
+  <div class="risk"><h3>Ragged depth fights batching</h3><p>Per-token halting saves FLOPs only if your kernels can compact the batch as tokens exit. Otherwise the batch runs at the depth of its deepest token. Fixed-capacity routing (MoR) keeps the batch shape known in advance, at the cost of a capacity limit the router must respect.</p></div>
+  <div class="risk"><h3>Training is costlier and touchier</h3><p>Backpropagating through <code>r</code> iterations multiplies activation memory, which is why Huginn truncates to the last 8. Deep weight-tied recurrences are also prone to instability; Geiping et al. describe failed early runs in which the model learned to ignore the loop.</p></div>
+  <div class="risk"><h3>Extrapolation has a ceiling</h3><p>Looping past the depths seen in training helps only if the model learned a process that converges. Gains on easy tasks saturate after a handful of iterations, and a model trained at one fixed depth may degrade rather than improve when you loop it further.</p></div>
+  <div class="risk"><h3>It cannot learn facts it has no room for</h3><p>A 3.5B looped model has the storage of a 3.5B model. On knowledge-bound workloads like closed-book QA, long-tail entities and API trivia, a larger flat model wins, and no loop count changes that.</p></div>
+</div>
+
+<h2><span class="claim">When it pays</span>A capacity tool with a thinking dial</h2>
+
+<p>Put together, a looped transformer is worth considering when <strong>memory capacity, not bandwidth or FLOPs, is what you're short of</strong>: one GPU instead of eight, an edge device, or a deployment where KV cache headroom sets your batch size. It fits best when the workload is reasoning-heavy and uneven in difficulty, so a per-request depth dial earns its keep, and when the alternative is a long chain-of-thought whose tokens you would otherwise pay for in time and cache.</p>
+
+<p>It is the wrong tool when you're serving a busy endpoint at high batch, where you're compute-bound and a loop costs the same FLOPs as a bigger model; when the workload is knowledge-bound; or when the requirement is simply lower latency. Then a smaller model, or <a href="/speculative-decoding/">speculative decoding</a> on the one you have, buys more.</p>
+
+<p>The honest summary of the architecture is one line: it decouples what a model <em>knows</em> from how long it <em>thinks</em>, and you pay for the thinking in full every time.</p>
+</div>
+
+</div></main>
+
+<footer><div class="frame"><div class="col">
+Primary sources: Dehghani et al., <a href="https://arxiv.org/abs/1807.03819">Universal Transformers</a> (ICLR 2019); Yang, Lee, Nowak &amp; Papailiopoulos, <a href="https://arxiv.org/abs/2311.12424">Looped Transformers are Better at Learning Learning Algorithms</a> (2023); Fan, Du, Ramchandran &amp; Lee, <a href="https://arxiv.org/abs/2409.15647">Looped Transformers for Length Generalization</a> (2024); Geiping et al., <a href="https://arxiv.org/abs/2502.05171">Scaling up Test-Time Compute with Latent Reasoning: A Recurrent Depth Approach</a> (2025); Saunshi et al., <a href="https://arxiv.org/abs/2502.17416">Reasoning with Latent Thoughts: On the Power of Looped Transformers</a> (ICLR 2025); Bae et al., <a href="https://arxiv.org/abs/2410.20672">Relaxed Recursive Transformers</a> (ICLR 2025); Bae et al., <a href="https://arxiv.org/abs/2507.10524">Mixture-of-Recursions</a> (2025); Graves, <a href="https://arxiv.org/abs/1603.08983">Adaptive Computation Time</a> (2016); Schuster et al., <a href="https://arxiv.org/abs/2207.07061">Confident Adaptive Language Modeling</a> (2022); Jolicoeur-Martineau, <a href="https://arxiv.org/abs/2510.04871">Less is More: Recursive Reasoning with Tiny Networks</a> (2025); Zhu et al., <a href="https://arxiv.org/abs/2510.25741">Scaling Latent Reasoning via Looped Language Models</a> (2025).<br><br>
+Figures 2 to 5 are illustrations driven by toy rules stated in their captions, not trained models. Figure 6 is an analytical roofline computed from the formulas shown, not a measurement. Figures 1 and 6 use Huginn-3.5B's published layer shape. Benchmark numbers in the ledger are as reported by each paper's authors.
+</div></div></footer>
+
+<script>
+/* ============================================================ shared ====
+   Every figure draws SVG from strings and colours it through CSS classes,
+   so light and dark themes come for free.                                */
+var LT = (function(){
+"use strict";
+var D=5280, F=17920, V=65536;
+var LAYER=4*D*D+3*D*F, EMB=V*D;
+function $(id){ return document.getElementById(id); }
+function R(x,y,w,h,cls,rx,extra){ return '<rect x="'+x+'" y="'+y+'" width="'+Math.max(w,0)+'" height="'+h+'" rx="'+(rx==null?2:rx)+'" class="'+cls+'"'+(extra||'')+'/>'; }
+function T(x,y,s,cls,anchor,extra){ return '<text x="'+x+'" y="'+y+'" class="'+cls+'"'+(anchor?' text-anchor="'+anchor+'"':'')+(extra||'')+'>'+s+'</text>'; }
+function P(d,cls,extra){ return '<path d="'+d+'" class="'+cls+'"'+(extra||'')+'/>'; }
+function fmtP(n){ return n>=1e9 ? (n/1e9).toFixed(n>=1e10?0:1)+'B' : Math.round(n/1e6)+'M'; }
+function fmtGB(b){ var g=b/1e9; return (g<10?g.toFixed(1):Math.round(g))+' GB'; }
+function fmtMs(s){ if(!s) return '0'; var m=s*1e3; return (m<10?m.toFixed(1):Math.round(m))+' ms'; }
+// one pressed button per group
+function seg(id, attr, onpick){
+  var g=$(id), bs=g.querySelectorAll('button');
+  g.addEventListener('click', function(ev){
+    var b=ev.target.closest('button'); if(!b) return;
+    bs.forEach(function(x){ x.setAttribute('aria-pressed', x===b?'true':'false'); });
+    onpick(b.getAttribute(attr));
+  });
+  return function(v){ bs.forEach(function(x){ x.setAttribute('aria-pressed', x.getAttribute(attr)===String(v)?'true':'false'); }); };
+}
+var ARROW='<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--ink-soft)"/></marker>'+
+  '<marker id="ahl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--loop)"/></marker>'+
+  '<marker id="ahi" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--inj)"/></marker>'+
+  '<marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--muted)"/></marker></defs>';
+return {D:D,F:F,V:V,LAYER:LAYER,EMB:EMB,$:$,R:R,T:T,P:P,fmtP:fmtP,fmtGB:fmtGB,fmtMs:fmtMs,seg:seg,ARROW:ARROW};
+})();
+</script>
+
+<script>
+/* =========================================================== Fig 1 ======
+   Folded view: the architecture as written. Unrolled view: the stack the
+   hardware executes, compressed in the middle when r is large.           */
+(function(){
+"use strict";
+var $=LT.$, R=LT.R, T=LT.T, P=LT.P;
+var S={P:2,k:4,r:32,C:2,inj:'concat',view:'fold'};
+var PRESETS={
+  flat:  {P:2,k:4,r:1, C:2,inj:'none'},
+  ut:    {P:0,k:1,r:12,C:0,inj:'none'},
+  huginn:{P:2,k:4,r:32,C:2,inj:'concat'}
+};
+var svg=$('f1-svg');
+var setInj=LT.seg('f1-inj','data-inj',function(v){ S.inj=v; clearPreset(); draw(); });
+LT.seg('f1-view','data-view',function(v){ S.view=v; draw(); });
+var setPreset=LT.seg('f1-presets','data-preset',function(v){
+  var p=PRESETS[v]; for(var key in p) S[key]=p[key];
+  syncInputs(); setInj(S.inj); draw();
+});
+function clearPreset(){ setPreset('none'); }
+['P','k','r','C'].forEach(function(key){
+  $('f1-'+key).addEventListener('input', function(){ S[key]=+this.value; clearPreset(); draw(); });
+});
+function syncInputs(){ ['P','k','r','C'].forEach(function(key){ $('f1-'+key).value=S[key]; }); }
+
+function blockShade(j,k){ return (k===1?1:.4+.6*j/(k-1)).toFixed(2); }
+
+function folded(){
+  var y=78, h=64, x=16, o='', mid=y+h/2;
+  o+=R(x,y,88,h,'d-sunk',2)+T(x+44,mid-3,'Embed','d-lbl','middle')+T(x+44,mid+13,'tokens &#8594; e','d-sm','middle');
+  var embCx=x+44; x+=88;
+  function link(){ o+=P('M'+(x+2)+' '+mid+'H'+(x+20),'d-line',' marker-end="url(#ah)"'); x+=24; }
+  link();
+  if(S.P){
+    o+=T(x,y-10,'PRELUDE','d-tag');
+    for(var i=0;i<S.P;i++){ o+=R(x,y,30,h,'f-edge',2)+T(x+15,mid+4,'P'+(i+1),'d-sm','middle',' style="fill:var(--surface)"'); x+=36; }
+    x-=6; link();
+  }
+  // merge point for injection and loop return
+  var mx=x+8; o+=R(mx-8,mid-8,16,16,'d-box',8);
+  o+=T(mx,mid+4,S.inj==='concat'?'&#8214;':(S.inj==='add'?'+':'&#183;'),'d-lbl','middle');
+  x+=16; link();
+  var bx=x, bw=24+36*S.k-6;
+  o+=R(bx,y-12,bw,h+24,'w-loop',3,' style="stroke:var(--loop);stroke-width:1.4"');
+  o+=T(bx,y-20,'SHARED BLOCK &middot; '+S.k+' LAYER'+(S.k>1?'S':''),'d-tag',null,' style="fill:var(--loop)"');
+  for(var j=0;j<S.k;j++){
+    o+=R(bx+12+36*j,y,30,h,'f-loop',2,' fill-opacity="'+blockShade(j,S.k)+'"');
+    o+=T(bx+27+36*j,mid+4,'B'+(j+1),'d-sm','middle',' style="fill:var(--surface)"');
+  }
+  x=bx+bw;
+  // loop return arrow
+  var ly=y+h+40;
+  if(S.r>1){
+    o+=P('M'+(bx+bw-14)+' '+(y+h+12)+'V'+ly+'H'+mx+'V'+(mid+10),'s-loop',' marker-end="url(#ahl)"');
+    o+=R(bx+bw/2-30,ly-11,60,22,'f-loop',11)+T(bx+bw/2,ly+4,'&#215; '+S.r,'d-lbl','middle',' style="fill:var(--surface);font-weight:600"');
+  } else {
+    o+=T(bx+bw/2,ly+4,'runs once: no loop','d-sm','middle');
+  }
+  // injection
+  if(S.inj!=='none'){
+    var iy=y-36;
+    o+=P('M'+embCx+' '+y+'V'+iy+'H'+mx+'V'+(mid-10),'s-inj',' marker-end="url(#ahi)"');
+    o+=T(embCx+10,iy-6,S.inj==='add'?'s &#8592; s + e, every iteration':'s &#8592; A[s &#8214; e], every iteration','d-sm',null,' style="fill:var(--inj)"');
+  } else if(S.r>1){
+    o+=T(embCx,ly+34,'no injection: the input is seen only on the first pass','d-sm');
+  }
+  x+=4; link();
+  if(S.C){
+    o+=T(x,y-10,'CODA','d-tag');
+    for(var c=0;c<S.C;c++){ o+=R(x,y,30,h,'f-edge',2)+T(x+15,mid+4,'C'+(c+1),'d-sm','middle',' style="fill:var(--surface)"'); x+=36; }
+    x-=6; link();
+  }
+  o+=R(x,y,88,h,'d-sunk',2)+T(x+44,mid-3,'Unembed','d-lbl','middle')+T(x+44,mid+13,'&#8594; logits','d-sm','middle');
+  x+=88;
+  var W=Math.max(800,x+16);
+  svg.setAttribute('viewBox','0 0 '+W+' 250');
+  return o;
+}
+
+function unrolled(){
+  var o='', y=74, h=58, E=S.P+S.k*S.r+S.C;
+  var compress=S.r>6, iters=[];
+  if(compress){ iters=[1,2,3,'gap',S.r-1,S.r]; } else { for(var i=1;i<=S.r;i++) iters.push(i); }
+  var nCells=S.P+S.C+S.k*(compress?5:S.r), gapW=compress?92:0;
+  var avail=768-gapW, cw=Math.min(28, avail/nCells), x=16+(avail-cw*nCells)/2;
+  function cell(cls,lbl,op){
+    o+=R(x+1,y,cw-2,h,cls,1.5,op?' fill-opacity="'+op+'"':'');
+    if(cw>=20) o+=T(x+cw/2,y+h/2+4,lbl,'d-sm','middle',' style="fill:var(--surface);font-size:9.5px"');
+    x+=cw;
+  }
+  o+=T(16,30,E+' LAYER EVALUATIONS PER TOKEN &middot; '+(S.P+S.k+S.C)+' DISTINCT WEIGHT SETS','d-tag');
+  for(var p=0;p<S.P;p++) cell('f-edge','P'+(p+1));
+  iters.forEach(function(it){
+    if(it==='gap'){
+      o+=R(x+6,y,gapW-12,h,'d-box',2,' stroke-dasharray="4 3"');
+      o+=T(x+gapW/2,y+h/2-2,'&#8230; '+(S.r-5)+' more','d-sm','middle')+T(x+gapW/2,y+h/2+12,'iterations &#8230;','d-sm','middle');
+      x+=gapW; return;
+    }
+    var x0=x;
+    if(S.inj!=='none') o+=P('M'+(x0+1)+' '+(y-16)+'V'+(y-3),'s-inj',' marker-end="url(#ahi)"');
+    for(var j=0;j<S.k;j++) cell('f-loop','B'+(j+1),blockShade(j,S.k));
+    o+=P('M'+(x0+2)+' '+(y+h+8)+'v5H'+(x-2)+'v-5','d-rule');
+    if(x-x0>=34 || it===1 || it===S.r) o+=T((x0+x)/2,y+h+26,(x-x0<52?'':'iter ')+it,'d-sm','middle');
+  });
+  for(var c=0;c<S.C;c++) cell('f-edge','C'+(c+1));
+  var ly=y+h+56;
+  o+=R(16,ly-8,10,10,'f-loop',1.5)+T(32,ly+1,'same block weights, reused','d-sm');
+  o+=R(220,ly-8,10,10,'f-edge',1.5)+T(236,ly+1,'used once','d-sm');
+  if(S.inj!=='none') o+=P('M372 '+(ly-9)+'v10','s-inj')+T(382,ly+1,'input e injected','d-sm');
+  svg.setAttribute('viewBox','0 0 800 250');
+  return o;
+}
+
+function stats(){
+  var uniq=S.P+S.k+S.C, E=S.P+S.k*S.r+S.C;
+  var stored=uniq*LT.LAYER+LT.EMB, deep=E*LT.LAYER+LT.EMB;
+  var cells=[
+    ['Distinct layers', uniq, 'v-edge', 'weights you store'],
+    ['Effective depth', E, 'v-loop', 'layers each token passes through'],
+    ['Parameters stored', LT.fmtP(stored), '', LT.fmtGB(2*stored)+' in 16-bit'],
+    ['Same-depth unshared model', LT.fmtP(deep), 'v-inj', E===uniq?'identical: nothing is shared':(deep/stored).toFixed(1)+'&#215; the parameters']
+  ];
+  $('f1-stats').innerHTML=cells.map(function(c){
+    return '<div class="stat"><span class="k">'+c[0]+'</span><span class="v '+c[2]+'">'+c[1]+'</span><span class="s">'+c[3]+'</span></div>';
+  }).join('');
+}
+
+function draw(){
+  ['P','k','r','C'].forEach(function(key){ $('f1-'+key+'v').textContent=S[key]; });
+  svg.innerHTML=LT.ARROW+(S.view==='fold'?folded():unrolled());
+  svg.setAttribute('aria-label','Looped model with '+S.P+' prelude layers, a '+S.k+'-layer shared block run '+S.r+' times, and '+S.C+' coda layers: '+(S.P+S.k*S.r+S.C)+' layer evaluations per token.');
+  stats();
+}
+draw();
+})();
+</script>
+
+<script>
+/* =========================================================== Fig 2 ======
+   Tokens across, passes down. Difficulty scores are invented; each rule
+   simulates the quantity it measures and applies its paper's stop test.  */
+(function(){
+"use strict";
+var $=LT.$, R=LT.R, T=LT.T;
+var TOK=['The','answer','to','17','&#215;','24','is','408','.'];
+var DIFF=[.08,.3,.1,.5,.62,.5,.35,1,.04];
+var n=TOK.length, MAXR=16, MOR_STEPS=4;
+
+var MODES={
+  fixed:{who:'Huginn default &middot; Yang et al.', nm:'Fixed loop count', dial:'loops r', init:50,
+    rule:[
+      ['Stops when','The token has been through the block <b>r times</b>. Nothing is measured.'],
+      ['Decided','Before the request starts. Every token gets the same r.'],
+      ['Training','Huginn samples a random r for every training step (mean 32), so the model works at whatever r you pick later.'],
+      ['Cost of checking','None.'],
+      ['The slider','r, the number of passes.']],
+    shade:'Uniform shade: every token is treated the same, so the full stop gets as many passes as the answer digits.'},
+  act:{who:'Universal Transformer, 2018', nm:'Learned halting (ACT)', dial:'ponder cost &#964;', init:30,
+    rule:[
+      ['Stops when','After every pass, a small <b>halting unit</b> reads the token’s state and outputs a score h between 0 and 1. The token keeps a <b>running total</b> of its scores and stops on the pass where the total reaches <b>1 &minus; &#949;</b> (&#949; = 0.01 in Graves’s ACT), or at a hard cap on passes. Its output is the average of its per-pass states, weighted by those scores.'],
+      ['Decided','During the forward pass, per token, from the token’s own state.'],
+      ['Training','Required. The halting unit is trained with the model, and a <b>ponder cost</b> &#964; &#215; (passes used) is added to the loss so it learns not to over-think. In the Universal Transformer a stopped token’s state is copied forward unchanged until every token has stopped.'],
+      ['Cost of checking','Tiny: one dot product per token per pass.'],
+      ['The slider','&#964;. A higher ponder cost teaches tokens to stop sooner.']],
+    shade:'Shade = the running total of halting scores. Each token stops in the row where its total reaches 0.99.'},
+  kl:{who:'Huginn zero-shot exit, 2025', nm:'Exit on convergence', dial:'KL threshold', init:67,
+    rule:[
+      ['Stops when','After every pass, the state is read out into a next-token prediction p. The token stops when that prediction <b>barely moved since the previous pass</b>: KL(p<sub>this pass</sub> &#8214; p<sub>last pass</sub>) below a threshold. Huginn uses 5&#215;10<sup>&minus;4</sup>.'],
+      ['Decided','During the forward pass, per token, by watching its output settle.'],
+      ['Training','None. It works zero-shot on a model trained with random r.'],
+      ['Cost of checking','Not free. Getting a prediction means running the coda and the output projection on every pass, and with a large vocabulary that is a real fraction of a layer.'],
+      ['The slider','The threshold. A looser threshold lets tokens stop sooner.']],
+    shade:'Shade = how much the token’s prediction is still changing. It fades as the token converges and stops once the change drops under the threshold.'},
+  mor:{who:'Mixture-of-Recursions, 2025', nm:'Router with fixed capacity', dial:'tokens kept per step', init:0,
+    rule:[
+      ['Stops when','Before each recursion step, a small <b>router</b> scores every token. Only the <b>top k</b> tokens by score go through the block; the rest are done. k shrinks with depth: MoR keeps 100%, then 2/3, then 1/3 of tokens over three steps.'],
+      ['Decided','At each step, by rank against the other tokens (“expert choice”). A variant (“token choice”) has the router assign each token its full depth once, up front.'],
+      ['Training','Required. Ranking against other tokens peeks at tokens later in the sequence, which isn’t possible while generating, so MoR adds an auxiliary loss that lets each token’s score be judged on its own at inference.'],
+      ['Cost of checking','Tiny: one dot product per token per step.'],
+      ['The slider','How many tokens each step keeps. Fewer steps, coarser decisions, but the batch size at every step is known in advance.']],
+    shade:'Shade = the router score. Each step keeps only the highest-scoring columns.'}
+};
+var mode='fixed';
+
+function model(v){
+  if(mode==='fixed'){
+    var r=Math.max(1,Math.round(1+v/100*(MAXR-1)));
+    return {d:DIFF.map(function(){return r;}), op:function(){return .7;}, lbl:String(r), rows:MAXR};
+  }
+  if(mode==='act'){
+    var tau=v/100*0.05;
+    var h=DIFF.map(function(x){ return Math.max(.02,Math.min(.99,(0.06+0.55*(1-x)*(1-x))*(1+40*tau))); });
+    return {d:h.map(function(hi){ return Math.min(MAXR,Math.ceil(0.99/hi-1e-9)); }),
+      op:function(i,row){ return .15+.85*Math.min(1,(row+1)*h[i]); }, lbl:tau.toFixed(3), rows:MAXR};
+  }
+  if(mode==='kl'){
+    var lg=-1-3*v/100, thr=Math.pow(10,lg), K0=0.5;
+    var sc=DIFF.map(function(x){ return 0.5+3.2*x; });
+    return {d:sc.map(function(s){ return Math.max(1,Math.min(MAXR,Math.ceil(s*Math.log(K0/thr)))); }),
+      op:function(i,row){ var kl=K0*Math.exp(-(row+1)/sc[i]); return .15+.85*Math.max(0,Math.min(1,Math.log(kl/thr)/Math.log(K0/thr))); },
+      lbl:(lg===-1?'0.1':'10<sup>'+lg.toFixed(1)+'</sup>'), rows:MAXR};
+  }
+  var slope=1/3-0.25*v/100, keeps=[], d=DIFF.map(function(){return 0;});
+  var order=DIFF.map(function(x,i){return i;}).sort(function(a,b){return DIFF[b]-DIFF[a];});
+  for(var s=0;s<MOR_STEPS;s++){
+    var keep=Math.max(0,1-s*slope); keeps.push(Math.round(keep*100));
+    var cnt=Math.ceil(n*keep-1e-9); for(var q=0;q<cnt;q++) d[order[q]]++;
+  }
+  return {d:d, op:function(i){ return .25+.75*DIFF[i]; }, lbl:keeps.join(' &#183; ')+'%', rows:MOR_STEPS};
+}
+
+var tabs=$('f2-tabs');
+tabs.innerHTML=Object.keys(MODES).map(function(key){
+  var m=MODES[key];
+  return '<button class="tab" role="tab" data-k="'+key+'" aria-selected="'+(key===mode)+'"><span class="who">'+m.who+'</span><span class="nm">'+m.nm+'</span></button>';
+}).join('');
+tabs.addEventListener('click',function(ev){
+  var b=ev.target.closest('.tab'); if(!b) return;
+  mode=b.getAttribute('data-k');
+  tabs.querySelectorAll('.tab').forEach(function(t){ t.setAttribute('aria-selected', t===b?'true':'false'); });
+  $('f2-dial').value=MODES[mode].init; draw();
+});
+$('f2-dial').addEventListener('input',draw);
+
+function draw(){
+  var m=MODES[mode], res=model(+$('f2-dial').value), d=res.d, rows=res.rows;
+  $('f2-rule').innerHTML=m.rule.map(function(r){ return '<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>'; }).join('');
+  $('f2-dial-name').innerHTML=m.dial; $('f2-dialv').innerHTML=res.lbl;
+  $('f2-shade').textContent=m.shade;
+  var cw=74, gx=96, top=46, rh=rows===MAXR?12:42, gap=2, o='';
+  TOK.forEach(function(t,i){ o+=T(gx+i*cw+cw/2-3,30,t,'d-tok','middle'); });
+  for(var r=0;r<rows;r++){
+    var y=top+r*(rh+gap);
+    if(r===0||r===rows-1||(rows===MAXR&&(r+1)%4===0)) o+=T(gx-12,y+rh-2,'pass '+(r+1),'d-sm','end');
+    for(var i=0;i<n;i++){
+      var on=r<d[i];
+      o+=R(gx+i*cw,y,cw-6,rh,on?'f-loop':'d-sunk',1.5,on?' fill-opacity="'+res.op(i,r).toFixed(2)+'"':' style="stroke:none"');
+    }
+  }
+  var by=top+rows*(rh+gap)+18;
+  TOK.forEach(function(t,i){ o+=T(gx+i*cw+cw/2-3,by,d[i],'d-lbl','middle',' style="fill:var(--loop);font-weight:600"'); });
+  o+=T(gx-12,by,'passes','d-sm','end');
+  $('f2-svg').setAttribute('viewBox','0 0 800 '+(by+14));
+  $('f2-svg').innerHTML=o;
+
+  var used=d.reduce(function(a,b){return a+b;},0), mx=Math.max.apply(null,d);
+  var idle=mode==='mor'?0:1-used/(n*mx);
+  var cells=[
+    ['Block passes used', used, 'v-loop', 'out of '+(n*rows)+' cells in the grid'],
+    ['Deepest token', mx, '', 'passes'],
+    ['Idle if the batch waits for it', Math.round(idle*100)+'%', idle>.2?'v-warn':'v-edge',
+      mode==='mor'?'each step’s batch size is fixed':(mode==='fixed'?'nothing idles, nothing is saved':'see Fig 3 for the fix')]
+  ];
+  $('f2-stats').innerHTML=cells.map(function(c){
+    return '<div class="stat"><span class="k">'+c[0]+'</span><span class="v '+c[2]+'">'+c[1]+'</span><span class="s">'+c[3]+'</span></div>';
+  }).join('');
+}
+draw();
+})();
+</script>
+
+<script>
+/* =========================================================== Fig 3 ======
+   Eight sequences decoding. Each token draws a pass count; lockstep waits
+   for the batch's deepest token, refill starts the next token at once.   */
+(function(){
+"use strict";
+var $=LT.$, R=LT.R, T=LT.T;
+var B=8, STEPS=48, DIST=[2,3,3,4,4,5,5,6,7,8,10,12,16];
+var mode='lock', seed=7, seqs;
+
+function rng(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; var t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function draw_(){ var r=rng(seed); seqs=[]; for(var s=0;s<B;s++){ var q=[]; for(var k=0;k<40;k++) q.push(DIST[Math.floor(r()*DIST.length)]); seqs.push(q); } }
+
+// grid[s][t] = token index running in that slot, or -1 when idle
+function sim(m){
+  var grid=[], fin=0, s, t;
+  for(s=0;s<B;s++){ grid.push([]); for(t=0;t<STEPS;t++) grid[s].push(-1); }
+  if(m==='lock'){
+    for(var c=0,k=0;c<STEPS;k++){
+      var mx=0; for(s=0;s<B;s++) mx=Math.max(mx,seqs[s][k]);
+      for(s=0;s<B;s++){
+        for(t=c;t<Math.min(STEPS,c+seqs[s][k]);t++) grid[s][t]=k;
+        if(c+seqs[s][k]<=STEPS) fin++;
+      }
+      c+=mx;
+    }
+  } else {
+    for(s=0;s<B;s++){
+      for(var c2=0,k2=0;c2<STEPS;k2++){
+        var dd=seqs[s][k2];
+        for(t=c2;t<Math.min(STEPS,c2+dd);t++) grid[s][t]=k2;
+        if(c2+dd<=STEPS) fin++;
+        c2+=dd;
+      }
+    }
+  }
+  var busy=0; grid.forEach(function(row){ row.forEach(function(v){ if(v>=0) busy++; }); });
+  return {grid:grid, fin:fin, util:busy/(B*STEPS)};
+}
+
+function draw(){
+  var A=sim(mode), L=sim('lock'), F=sim('refill');
+  var x0=78, cw=(790-x0)/STEPS, rh=22, top=50, o='';
+  for(var t=0;t<=STEPS;t+=8){ var xx=x0+t*cw; o+='<line x1="'+xx+'" y1="'+(top-4)+'" x2="'+xx+'" y2="'+(top+B*(rh+4))+'" class="d-grid"/>'+T(xx,top-10,t,'d-sm','middle'); }
+  o+=T(x0,16,'TIME: BATCHED PASSES THROUGH THE BLOCK &#8594;','d-tag');
+  for(var s=0;s<B;s++){
+    var y=top+s*(rh+4);
+    o+=T(x0-10,y+rh/2+4,'seq '+(s+1),'d-sm','end');
+    var row=A.grid[s];
+    for(var c=0;c<STEPS;c++){
+      var k=row[c], x=x0+c*cw;
+      if(k<0){ o+=R(x+.5,y,cw-1,rh,'w-warn',1,' style="stroke:var(--warn);stroke-opacity:.35;stroke-width:.6"'); continue; }
+      var startTok=c===0||row[c-1]!==k, endTok=c===STEPS-1||row[c+1]!==k;
+      o+=R(x+(startTok?1.2:0),y,cw-(startTok?1.2:0)-(endTok?1.2:0),rh,'f-loop',0,' fill-opacity="'+(k%2?.5:.9)+'"');
+    }
+  }
+  var ly=top+B*(rh+4)+18;
+  o+=R(x0,ly-9,12,10,'f-loop',1)+T(x0+18,ly,'a token’s passes','d-sm')+R(x0+150,ly-9,12,10,'w-warn',1,' style="stroke:var(--warn);stroke-opacity:.5"')+T(x0+168,ly,'slot idle: computed, wasted','d-sm');
+  $('f3-svg').setAttribute('viewBox','0 0 800 '+(ly+10));
+  $('f3-svg').innerHTML=o;
+
+  var cells=[
+    ['Slots doing useful work', Math.round(A.util*100)+'%', A.util<.7?'v-warn':'v-loop', 'of all batch slots in 48 passes'],
+    ['Tokens finished', A.fin, '', 'across 8 sequences'],
+    ['Throughput vs lockstep', (A.fin/L.fin).toFixed(2)+'&#215;', mode==='refill'?'v-loop':'', mode==='refill'?'same tokens, same exit rule':'the baseline']
+  ];
+  $('f3-stats').innerHTML=cells.map(function(c){
+    return '<div class="stat"><span class="k">'+c[0]+'</span><span class="v '+c[2]+'">'+c[1]+'</span><span class="s">'+c[3]+'</span></div>';
+  }).join('');
+  $('f3-note').innerHTML=mode==='lock'
+    ? '<b>Lockstep:</b> every sequence waits until the slowest token in the batch is done before anyone starts their next token. The red cells are paid for: the GPU runs a full batch-wide pass whether or not a row has work. Switch to refill to compare: '+Math.round(F.util*100)+'% busy and '+(F.fin/L.fin).toFixed(2)+'&#215; the tokens.'
+    : '<b>Depth-wise refill:</b> when a token finishes, its sequence starts the next token in the same slot on the very next pass, even while its neighbours are on pass 9. That only works because every pass uses the same weights, so tokens at different depths can share one matrix multiply. An ordinary transformer can’t do this: a token on layer 3 and one on layer 10 need different weights.';
+}
+
+LT.seg('f3-mode','data-mode',function(v){ mode=v; draw(); });
+$('f3-new').addEventListener('click',function(){ seed=Math.floor(Math.random()*1e9); draw_(); draw(); });
+draw_(); draw();
+})();
+</script>
+
+<script>
+/* =========================================================== Fig 4 ======
+   Nine earlier tokens with fixed exit depths, one new token on pass d.
+   Each strategy decides what fills the holes and what row d reads.       */
+(function(){
+"use strict";
+var $=LT.$, R=LT.R, T=LT.T, P=LT.P;
+var EX=[3,8,2,5,8,4,7,2,6], NT=EX.length, MAXD=8;
+var S={mode:'copy', d:6};
+var MODES={
+  copy:{who:'Universal Transformer &middot; CALM', nm:'Copy the state upward',
+    note:'When a token stops, carry its final state upward as if it had kept going, and compute the missing keys and values from that copy. CALM (Schuster et al., 2022) does exactly this for early-exit decoding, and the Universal Transformer copies halted states forward. Every hole is filled, so attention sees every token. The cost is a key/value projection for every hole, which hands back part of the compute early exit saved. Bae et al. (2024) propose running those projections in the same batched pass as other work, since memory-bound decoding leaves compute idle.'},
+  deep:{who:'Huginn', nm:'Read the deepest entry',
+    note:'Fill nothing. When the new token needs a pass-d entry that an earlier token never produced, it reads that token’s deepest stored entry instead (the arrows). Free, but stale: a pass-d query is compared against keys from a shallower pass. Geiping et al. use this with their zero-shot exits and report MT-Bench 5.56 with early exits against 5.63 without.'},
+  act:{who:'MoR &middot; recursion-wise caching', nm:'Only attend to who is still here',
+    note:'Store keys and values at each depth only for the tokens that reached it, and let attention at depth d see only those tokens (crossed-out cells are simply not attended to). Nothing is filled and nothing is stale, but deep passes see fewer and fewer neighbours. It works in Mixture-of-Recursions because the router is trained knowing this is what attention will see. KV memory and reads drop to about (N<sub>r</sub>+1)/2N<sub>r</sub> of a full cache.'},
+  share:{who:'MoR &middot; recursive KV sharing', nm:'Share the first pass',
+    note:'Every token takes the first pass, so cache keys and values only there and let every later pass attend to them. No holes ever appear, and the cache is 1/N<sub>r</sub> the size of caching every pass. The price is accuracy: deep passes see only shallow keys. The MoR paper finds this hurts their expert-choice routing noticeably and slightly helps token-choice routing.'}
+};
+var tabs=$('f4-tabs');
+tabs.innerHTML=Object.keys(MODES).map(function(key){
+  var m=MODES[key];
+  return '<button class="tab" role="tab" data-k="'+key+'" aria-selected="'+(key===S.mode)+'"><span class="who">'+m.who+'</span><span class="nm">'+m.nm+'</span></button>';
+}).join('');
+tabs.addEventListener('click',function(ev){
+  var b=ev.target.closest('.tab'); if(!b) return;
+  S.mode=b.getAttribute('data-k');
+  tabs.querySelectorAll('.tab').forEach(function(t){ t.setAttribute('aria-selected', t===b?'true':'false'); });
+  draw();
+});
+$('f4-d').addEventListener('input',function(){ S.d=+this.value; $('f4-dv').textContent=S.d; draw(); });
+
+function draw(){
+  var x0=96, cw=62, rh=20, gap=3, top=40, o=LT.ARROW, dr=S.d-1;
+  function cx(i){ return x0+i*cw; } function ry(r){ return top+r*(rh+gap); }
+  for(var i=0;i<=NT;i++) o+=T(cx(i)+(cw-8)/2,top-12,i<NT?'t'+(i+1):'new','d-sm','middle',i<NT?'':' style="fill:var(--loop);font-weight:600"');
+  for(var r=0;r<MAXD;r++) if(r===0||r===MAXD-1||r===dr) o+=T(x0-10,ry(r)+rh-5,'pass '+(r+1),'d-sm','end',r===dr?' style="fill:var(--ink);font-weight:600"':'');
+  var stored=0, extra=0, seen=0, stale=0;
+  for(i=0;i<NT;i++){
+    for(r=0;r<MAXD;r++){
+      var real=r<EX[i], x=cx(i), y=ry(r), cls, ex='';
+      if(S.mode==='share') real=(r===0);
+      if(real){ cls='f-edge'; ex=' fill-opacity=".75"'; stored++; }
+      else if(S.mode==='copy'){ cls='w-inj'; ex=' style="stroke:var(--inj);stroke-dasharray:3 2"'; stored++; extra++; }
+      else { cls='d-sunk'; ex=' style="stroke:none;opacity:.6"'; }
+      o+=R(x,y,cw-8,rh,cls,1.5,ex);
+    }
+    // what the new token reads in row d
+    var y0=ry(dr);
+    if(S.mode==='act' && EX[i]<S.d){
+      o+=P('M'+(cx(i)+(cw-8)/2-6)+' '+(y0+4)+'l12 12M'+(cx(i)+(cw-8)/2+6)+' '+(y0+4)+'l-12 12','s-warn');
+    } else seen++;
+    var src=-1;
+    if(S.mode==='deep' && EX[i]<S.d){ src=EX[i]-1; stale++; }
+    if(S.mode==='share' && dr>0){ src=0; stale++; }
+    if(src>=0){
+      o+=P('M'+(cx(i)+(cw-8)/2)+' '+(y0+rh/2)+'V'+(ry(src)+rh+3),'s-loop',' marker-end="url(#ahl)"');
+      o+=R(cx(i)-1,ry(src)-1,cw-6,rh+2,'',2,' style="fill:none;stroke:var(--loop);stroke-width:2"');
+    }
+  }
+  // the new token's own column
+  for(r=0;r<MAXD;r++) o+=R(cx(NT),ry(r),cw-8,rh,r<S.d?'f-loop':'d-sunk',1.5,r<S.d?' fill-opacity="'+(r===dr?1:.45)+'"':' style="stroke:none;opacity:.6"');
+  // the row being read
+  o+=R(x0-4,ry(dr)-3,(NT+1)*cw,rh+6,'',3,' style="fill:none;stroke:var(--loop);stroke-width:1.6;stroke-dasharray:5 3"');
+  var ly=ry(MAXD-1)+rh+26;
+  o+=R(x0,ly-9,12,10,'f-edge',1,' fill-opacity=".75"')+T(x0+18,ly,'stored keys/values','d-sm');
+  if(S.mode==='copy') o+=R(x0+160,ly-9,12,10,'w-inj',1,' style="stroke:var(--inj);stroke-dasharray:3 2"')+T(x0+178,ly,'filled from a copied state','d-sm');
+  if(S.mode==='deep'||S.mode==='share') o+=P('M'+(x0+166)+' '+(ly-9)+'v9','s-loop')+T(x0+178,ly,'read from a shallower pass instead','d-sm');
+  if(S.mode==='act') o+=T(x0+160,ly,'&#215; not attended to at this pass','d-sm',null,' style="fill:var(--warn)"');
+  $('f4-svg').setAttribute('viewBox','0 0 800 '+(ly+10));
+  $('f4-svg').innerHTML=o;
+
+  var exact=S.mode==='copy'?'approx.':(stale?stale+' stale':'exact');
+  var cells=[
+    ['Entries stored', stored, 'v-edge', 'for the 9 earlier tokens'],
+    ['Extra to compute', extra, extra?'v-inj':'', extra?'projections for stopped tokens':'nothing'],
+    ['Tokens seen at pass '+S.d, seen+' of '+NT, seen<NT?'v-warn':'v-loop', S.mode==='copy'?'via copied states where needed':exact]
+  ];
+  $('f4-stats').innerHTML=cells.map(function(c){
+    return '<div class="stat"><span class="k">'+c[0]+'</span><span class="v '+c[2]+'">'+c[1]+'</span><span class="s">'+c[3]+'</span></div>';
+  }).join('');
+  $('f4-note').innerHTML=MODES[S.mode].note;
+}
+draw();
+})();
+</script>
+
+<script>
+/* =========================================================== Fig 5 ======
+   A prompt of variable definitions ending in a number. Variables are laid
+   out in shuffled order; the block is a hand-written substitution rule.  */
+(function(){
+"use strict";
+var $=LT.$, R=LT.R, T=LT.T, P=LT.P;
+var N=12, LETTERS='abcdeghjkmnq'.split(''), VALUE='7';
+var path, slot, ptr, jump, prevJump, ansHist, t, timer=null;
+var S={p:7, r:4, mode:'hop', halt:false};
+
+function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)), x=a[i]; a[i]=a[j]; a[j]=x; } return a; }
+function newPrompt(){
+  path=shuffle(Array.from({length:N},function(_,i){return i;}));
+  slot=[]; shuffle(Array.from({length:N},function(_,i){return i;})).forEach(function(s,i){ slot[i]=s; });
+  ptr=[]; for(var i=0;i<N;i++) ptr[path[i]]= i<N-1 ? path[i+1] : path[i];
+  reset();
+}
+function start(){ return path[N-1-S.p]; }
+function end(){ return path[N-1]; }
+function idx(v){ return path.indexOf(v); }
+function name(v){ return v===end()?VALUE:LETTERS[v]; }
+function reset(){ stop(); t=0; jump=ptr.slice(); prevJump=ptr.slice(); ansHist=[answer()]; draw(); }
+function needed(){ return S.mode==='hop' ? S.p-1 : Math.ceil(Math.log2(S.p)); }
+// the value S currently holds after t passes
+function answer(){
+  if(S.mode==='hop') return path[Math.min(idx(start())+1+t, N-1)];
+  return jump[start()];
+}
+function hopsCovered(){ return idx(answer())-idx(start()); }
+// stopping looks only at S's own answer: unchanged since the last pass
+function converged(){ return t>0 && ansHist[t]===ansHist[t-1]; }
+function done(){ return t>=S.r || (S.halt && converged()); }
+function step(){
+  if(done()) return false;
+  t++;
+  prevJump=jump.slice();
+  if(S.mode==='dbl') jump=jump.map(function(j){ return jump[j]; });
+  ansHist.push(answer());
+  draw(); return true;
+}
+function stop(){ if(timer){ clearInterval(timer); timer=null; } $('f5-play').textContent='Run'; }
+function play(){
+  if(timer){ stop(); return; }
+  if(done()) reset();
+  $('f5-play').textContent='Pause';
+  timer=setInterval(function(){ if(!step()) stop(); }, 800);
+}
+
+function X(v){ return 52+slot[v]*63; }
+function arc(a,b,y,up,cls,extra){
+  var x1=X(a), x2=X(b), hgt=Math.min(90,14+Math.abs(x2-x1)*0.22)*(up?-1:1);
+  var dx=x2>x1?8:-8;
+  return P('M'+(x1+dx*0.6)+' '+y+'C'+(x1+dx)+' '+(y+hgt)+' '+(x2-dx)+' '+(y+hgt)+' '+(x2-dx*0.6)+' '+y, cls, extra);
+}
+function prompt(){
+  var s=start(), e=end(), lo=idx(s), hi=idx(answer());
+  var order=Array.from({length:N},function(_,i){return i;}).sort(function(a,b){ return slot[a]-slot[b]; });
+  var lines=order.map(function(v){
+    var cls='ln';
+    if(v===e) return '';
+    var rhs=S.mode==='dbl'?jump[v]:ptr[v];
+    if(v===s) cls+=' s';
+    if(S.mode==='hop' && idx(v)>=lo && idx(v)<hi) cls+=' used';
+    if(S.mode==='dbl' && t>0 && jump[v]!==prevJump[v]) cls+=' chg';
+    if(S.mode==='dbl' && v===s) cls+=' used';
+    if(ptr[v]===e && S.mode==='hop') cls+=' val';
+    return '<span class="'+cls+'">'+LETTERS[v]+' = '+name(rhs)+'</span>';
+  }).join('');
+  var trail=S.mode==='hop'
+    ? path.slice(lo, hi+1).map(name).join(' = ')
+    : LETTERS[s]+' = '+name(answer());
+  return '<span class="q">PROMPT'+(S.mode==='dbl'?' (AS REWRITTEN BY '+t+' PASS'+(t===1?'':'ES')+')':'')+' &#183; QUESTION: WHAT IS <b style="color:var(--inj)">'+LETTERS[s]+'</b>?</span>'+lines+
+    '<span class="q" style="margin:.35rem 0 0">MODEL’S WORKING AFTER '+t+' PASS'+(t===1?'':'ES')+': <b style="color:var(--loop)">'+trail+'</b></span>';
+}
+function draw(){
+  var y=128, o=LT.ARROW, s=start(), e=end(), a=answer(), lo=idx(s), hi=idx(a);
+  for(var v=0;v<N;v++){
+    if(v===e) continue;
+    var onChain=idx(v)>=lo;
+    o+=arc(v,ptr[v],y-18,true,'s-muted',' stroke-width="1" marker-end="url(#ahm)" opacity="'+(onChain?.8:.22)+'"');
+  }
+  if(S.mode==='dbl'){
+    for(var u=0;u<N;u++) if(u!==e && u!==s && jump[u]!==ptr[u]) o+=arc(u,jump[u],y+18,false,'s-loop',' stroke-width="1" opacity=".25"');
+  }
+  for(var q=lo;q<=hi;q++) o+='<circle cx="'+X(path[q])+'" cy="'+y+'" r="20" class="w-loop"/>';
+  if(a!==s) o+=arc(s,a,y+18,false,'s-loop',' stroke-width="2.6" marker-end="url(#ahl)"');
+  for(var w=0;w<N;w++){
+    var isAns=w===a;
+    if(w===e){
+      o+=R(X(w)-16,y-16,32,32,isAns?'f-inj':'w-inj',4,' style="stroke:var(--inj);stroke-width:1.6"');
+      o+=T(X(w),y+5,VALUE,'d-lbl','middle',' style="font-weight:600;font-size:14px'+(isAns?';fill:var(--surface)':';fill:var(--inj)')+'"');
+      continue;
+    }
+    o+='<circle cx="'+X(w)+'" cy="'+y+'" r="16" class="'+(isAns?'f-loop':'d-box')+'"'+(w===s?' style="stroke:var(--inj);stroke-width:2.6"':'')+'/>';
+    o+=T(X(w),y+4.5,LETTERS[w],'d-lbl','middle',isAns?' style="fill:var(--surface);font-weight:600"':'');
+  }
+  o+=T(16,22,'GREY ARROW: &#8220;IS DEFINED AS&#8221;','d-tag');
+  o+=T(784,22,'ORANGE RING: '+LETTERS[s]+', THE VARIABLE ASKED ABOUT','d-tag','end',' style="fill:var(--inj)"');
+  o+=T(16,240,'TEAL ARC: WHAT THE MODEL CURRENTLY BELIEVES '+LETTERS[s]+' EQUALS','d-tag',null,' style="fill:var(--loop)"');
+  $('f5-svg').innerHTML=o;
+  $('f5-prog').innerHTML=prompt();
+
+  var h=hopsCovered(), need=needed();
+  var vd=$('f5-verdict');
+  if(!done()){
+    vd.className='verdict';
+    vd.innerHTML=t===0
+      ?'Before any pass, the model has only read '+LETTERS[s]+'’s own line, so it knows <b>'+LETTERS[s]+' = '+name(a)+'</b>: one hop of '+S.p+'. Reaching the number takes <b>'+need+' pass'+(need===1?'':'es')+'</b> in this mode, and you have allowed <b>'+S.r+'</b>. Press Step or Run.'
+      :'After pass '+t+': the model believes <b>'+LETTERS[s]+' = '+name(a)+'</b>, '+h+' of '+S.p+' hops in.';
+    return;
+  }
+  if(a===e){
+    var wasted=S.r-t;
+    vd.className='verdict ok';
+    vd.innerHTML='<b>Correct: '+LETTERS[s]+' = '+VALUE+'.</b> '+(S.halt&&converged()
+      ?'It stopped after '+t+' passes because the answer was the same as after the pass before. That is one more than the '+need+' it needed: the price of noticing. '+(wasted>0?wasted+' of the '+S.r+' allowed passes were never run.':'')
+      :(t>need?'It needed '+need+' pass'+(need===1?'':'es')+'; the other '+(t-need)+' recomputed the same answer. That is depth you paid for and didn’t use. Tick “stop early” to get it back.':'Exactly enough passes.'));
+  } else {
+    vd.className='verdict no';
+    vd.innerHTML='<b>Out of loops. The model answers '+LETTERS[s]+' = '+name(a)+', which is wrong.</b> After '+t+' pass'+(t===1?'':'es')+' it has done '+h+' of the '+S.p+' substitutions, and nothing in its output says it is unfinished. Allow more loops and the same weights get there.';
+  }
+}
+
+$('f5-p').addEventListener('input',function(){ S.p=+this.value; $('f5-pv').textContent=S.p; reset(); });
+$('f5-r').addEventListener('input',function(){ S.r=+this.value; $('f5-rv').textContent=S.r; reset(); });
+$('f5-halt').addEventListener('change',function(){ S.halt=this.checked; reset(); });
+LT.seg('f5-mode','data-mode',function(v){ S.mode=v; reset(); });
+$('f5-play').addEventListener('click',play);
+$('f5-step').addEventListener('click',function(){ stop(); step(); });
+$('f5-reset').addEventListener('click',reset);
+$('f5-new').addEventListener('click',newPrompt);
+newPrompt();
+})();
+</script>
+
+<script>
+/* =========================================================== Fig 6 ======
+   Roofline per decode step for three models at Huginn's layer shape:
+   looped (2 + 4r + 2), unshared at the same depth, unshared r = 1.       */
+(function(){
+"use strict";
+var $=LT.$, R=LT.R, T=LT.T, P=LT.P;
+var BW=3.35e12, PEAK=989e12, HBM=80e9, D=LT.D, L=LT.LAYER, EMB=LT.EMB;
+var PRE=2, K=4, CODA=2;
+var S={r:32, b:1, t:4096, kv:'all'};
+
+function cachedIters(r){ return S.kv==='all'?r:(S.kv==='budget'?Math.min(r,4):1); }
+// E layer evaluations per token, `uniq` distinct layers, `cached` layers' worth of KV kept
+function cost(E, uniq, cached){
+  var params=uniq*L+EMB, wBytes=2*params;
+  var kvSeq=S.t*4*D*cached, kvAll=S.b*kvSeq;
+  var bytes=2*(E*L+EMB)+S.b*S.t*4*D*E;
+  var flops=S.b*(2*(E*L+EMB)+4*S.t*D*E);
+  var step=Math.max(bytes/BW, flops/PEAK);
+  return {params:params, w:wBytes, kv:kvAll, mem:wBytes+kvAll, step:step,
+          bound:bytes/BW>=flops/PEAK?'bandwidth':'compute',
+          fits:wBytes+kvAll<=HBM, maxB:Math.max(0,Math.floor((HBM-wBytes)/kvSeq))};
+}
+function looped(r){ return cost(PRE+K*r+CODA, PRE+K+CODA, PRE+CODA+K*cachedIters(r)); }
+function deep(r){ var E=PRE+K*r+CODA; return cost(E,E,E); }
+function small(){ return cost(PRE+K+CODA, PRE+K+CODA, PRE+K+CODA); }
+
+function chart(x0, w, title, ymax, series, fmtY, markR, extra){
+  var y0=40, h=170, o='';
+  function X(r){ return x0+(r-1)/63*w; }
+  function Y(v){ return y0+h-Math.min(v,ymax)/ymax*h; }
+  o+=T(x0,22,title,'d-tag');
+  for(var g=0;g<=4;g++){ var v=ymax*g/4, yy=Y(v); o+='<line x1="'+x0+'" y1="'+yy+'" x2="'+(x0+w)+'" y2="'+yy+'" class="d-grid"/>'+T(x0-6,yy+3.5,fmtY(v),'d-sm','end'); }
+  [1,16,32,48,64].forEach(function(r){ o+=T(X(r),y0+h+16,r,'d-sm','middle'); });
+  o+=T(x0+w/2,y0+h+32,'LOOPS r','d-tag','middle');
+  o+=extra?extra(X,Y):'';
+  series.forEach(function(s){
+    var pts=[]; for(var r=1;r<=64;r++) pts.push(X(r).toFixed(1)+','+Y(s.f(r)).toFixed(1));
+    o+='<polyline points="'+pts.join(' ')+'" class="'+s.cls+'"'+(s.extra||'')+'/>';
+  });
+  o+='<line x1="'+X(markR)+'" y1="'+y0+'" x2="'+X(markR)+'" y2="'+(y0+h)+'" class="d-rule" stroke-dasharray="3 3"/>';
+  return {svg:o, X:X, Y:Y};
+}
+
+function draw(){
+  $('f4-rv').textContent=S.r;
+  var A=looped(S.r), B=deep(S.r), C=small();
+  // latency chart
+  var lmax=deep(64).step*1.05;
+  // the memory axis stops at a few cards; lines above it are clipped at the top edge
+  var mmax=Math.max(Math.min(deep(64).mem,4*HBM), 2*HBM, Math.min(A.mem*1.15,12*HBM));
+  var c1=chart(60, 300, 'DECODE STEP, ONE TOKEN PER SEQUENCE', lmax, [
+      {f:function(r){return deep(r).step;}, cls:'s-edge', extra:' style="stroke-width:7;opacity:.5"'},
+      {f:function(r){return looped(r).step;}, cls:'s-loop'}
+    ], function(v){ return LT.fmtMs(v); }, S.r);
+  var o=c1.svg;
+  o+='<circle cx="'+c1.X(S.r)+'" cy="'+c1.Y(A.step)+'" r="4" class="f-loop"/>';
+  o+=T(c1.X(S.r)+(S.r>40?-8:8),c1.Y(A.step)-8,LT.fmtMs(A.step),'d-lbl',S.r>40?'end':null,' style="fill:var(--loop);font-weight:600"');
+  var yS=c1.Y(C.step);
+  o+='<line x1="60" y1="'+yS+'" x2="360" y2="'+yS+'" class="s-muted" stroke-dasharray="2 3"/>';
+  o+=T(358,yS-5,'no loop: '+LT.fmtMs(C.step),'d-sm','end');
+  o+=R(60,262,14,4,'f-loop',1)+T(80,267,'looped','d-sm')+R(140,261,14,6,'f-edge',1,' opacity=".5"')+T(160,267,'unshared, same depth','d-sm');
+  $('f4-lat').innerHTML=o;
+  // memory chart
+  var c2=chart(60, 300, 'GPU MEMORY: WEIGHTS + KV CACHE', mmax, [
+      {f:function(r){return deep(r).mem;}, cls:'s-edge'},
+      {f:function(r){return looped(r).mem;}, cls:'s-loop'}
+    ], function(v){ return Math.round(v/1e9)+' GB'; }, S.r, function(X,Y){
+      var yh=Y(HBM);
+      return '<rect x="60" y="40" width="300" height="'+Math.max(0,yh-40)+'" class="w-warn"/>'+
+        '<line x1="60" y1="'+yh+'" x2="360" y2="'+yh+'" class="s-warn" stroke-dasharray="4 3"/>'+
+        T(356,yh-5,'80 GB: one H100','d-tag','end',' style="fill:var(--warn)"');
+    });
+  o=c2.svg;
+  o+='<circle cx="'+c2.X(S.r)+'" cy="'+c2.Y(A.mem)+'" r="4" class="f-loop"/><circle cx="'+c2.X(S.r)+'" cy="'+c2.Y(B.mem)+'" r="4" class="f-edge"/>';
+  o+=T(60,267,'Same compute, very different storage.','d-sm');
+  $('f4-mem').innerHTML=o;
+
+  // one row per metric, so the three models line up value for value
+  var E=PRE+K*S.r+CODA, MS=[A,B,C];
+  var ROWS=[
+    ['parameters', function(m){ return [LT.fmtP(m.params)]; }],
+    ['weights', function(m){ return [LT.fmtGB(m.w)]; }],
+    ['KV cache, this batch', function(m){ return [LT.fmtGB(m.kv)]; }],
+    ['fits on one H100', function(m){ return [m.fits?'yes':'no', m.fits?'good':'bad']; }],
+    ['decode step', function(m){ return [LT.fmtMs(m.step)]; }],
+    ['tokens/s per sequence', function(m){ var v=1/m.step; return [v<10?v.toFixed(1):Math.round(v)]; }],
+    ['bound by', function(m){ return [m.bound]; }],
+    ['max batch at this context', function(m){ return [m.maxB>0?m.maxB:'none', m.maxB>0?'':'bad']; }]
+  ];
+  function head(cls,title,shape){ return '<th scope="col" class="'+cls+'"><span class="h">'+title+'</span><span class="shape">'+shape+'</span></th>'; }
+  $('f4-cmp').innerHTML='<table><thead><tr><th></th>'+
+    head('c-loop','Looped', PRE+' + '+K+'&#215;'+S.r+' + '+CODA+' = '+E+' evals')+
+    head('c-deep','Unshared, same depth', E+' layers')+
+    head('c-small','Unshared, same params', '8 layers, no loop')+
+    '</tr></thead><tbody>'+ROWS.map(function(row){
+      return '<tr><th scope="row">'+row[0]+'</th>'+MS.map(function(m){
+        var v=row[1](m); return '<td'+(v[1]?' class="'+v[1]+'"':'')+'>'+v[0]+'</td>';
+      }).join('')+'</tr>';
+    }).join('')+'</tbody></table>';
+  var ratio=A.step/C.step;
+  $('f4-note').innerHTML='At '+S.r+' loop'+(S.r===1?'':'s')+', each token costs <b>'+ratio.toFixed(1)+'&#215;</b> what the same weights cost without the loop, and exactly what the '+LT.fmtP(B.params)+' model costs. '+
+    (B.fits?'At this batch and context both still fit on one card.':'The '+LT.fmtP(B.params)+' model needs <b>'+LT.fmtGB(B.mem)+'</b> and no longer fits on one card; the looped one needs <b>'+LT.fmtGB(A.mem)+'</b>.')+
+    (A.fits?'':' <b>At this batch and context, even the looped model’s KV cache overflows the card</b>: try a KV-sharing option.');
+}
+
+$('f4-r').addEventListener('input',function(){ S.r=+this.value; draw(); });
+$('f4-t').addEventListener('change',function(){ S.t=+this.value; draw(); });
+$('f4-kv').addEventListener('change',function(){ S.kv=this.value; draw(); });
+LT.seg('f4-b','data-b',function(v){ S.b=+v; draw(); });
+draw();
+})();
+</script>
+
+<script>
+// GoatCounter: cookieless page counts, no personal data, no consent banner.
+// Production host only, so local previews are not counted.
+if (location.hostname === "swalla02.github.io") {
+  var gc = document.createElement("script");
+  gc.async = true;
+  gc.src = "//gc.zgo.at/count.js";
+  gc.setAttribute("data-goatcounter", "https://swalla02.goatcounter.com/count");
+  document.head.appendChild(gc);
+}
+</script>
+</body>
+</html>
