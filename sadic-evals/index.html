@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Let's Get Sadic With Agent Evals</title>
+<meta name="description" content="Agent evaluation is inherited from unit tests and held-out test sets, both built on one assumption that agents break: that the thing under test doesn't study the test. Why static suites saturate and what an evolutive environment has to do instead.">
+<link rel="canonical" href="https://swalla02.github.io/sadic-evals/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="Let's Get Sadic With Agent Evals">
+<meta property="og:description" content="A frozen benchmark is a solved artifact, not a measurement instrument. Why agent evaluation inherited from unit tests fails against reasoning models, and what an evolutive environment has to do.">
+<meta property="og:url" content="https://swalla02.github.io/sadic-evals/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-sadic.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Let's Get Sadic With Agent Evals">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Let's Get Sadic With Agent Evals">
+<meta name="twitter:description" content="A frozen benchmark is a solved artifact, not a measurement instrument. Why agent evaluation inherited from unit tests fails against reasoning models, and what an evolutive environment has to do.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-sadic.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F3; --surface:#FBFCFB; --sunk:#E8ECEA;
+  --ink:#111B1C; --ink-soft:#3D4E4E; --muted:#5E7070;
+  --rule:#D3DBD9; --rule-soft:#E2E8E6;
+  --sad:#0E7C86;   --sad-wash:#0E7C861C;    /* the adaptive environment */
+  --stat:#4C5C86;  --stat-wash:#4C5C861C;   /* static suite */
+  --sub:#C2711A;   --sub-wash:#C2711A20;    /* the tested agent */
+  --warn:#A24A38;  --warn-wash:#A24A381C;
+  --ok:#1F7350;    --ok-wash:#1F73501C;
+
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --frame:1020px; --measure:37rem; --wide:920px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0C1416; --surface:#121D1F; --sunk:#182628;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1A2A2C;
+  --sad:#4FD4CB;  --sad-wash:#4FD4CB1F;
+  --stat:#8FA0CC; --stat-wash:#8FA0CC24;
+  --sub:#E5A54E;  --sub-wash:#E5A54E24;
+  --warn:#DE8B77; --warn-wash:#DE8B7720;
+  --ok:#57C68F;   --ok-wash:#57C68F1C;
+}}
+:root[data-theme="dark"]{
+  --ground:#0C1416; --surface:#121D1F; --sunk:#182628;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1A2A2C;
+  --sad:#4FD4CB;  --sad-wash:#4FD4CB1F;
+  --stat:#8FA0CC; --stat-wash:#8FA0CC24;
+  --sub:#E5A54E;  --sub-wash:#E5A54E24;
+  --warn:#DE8B77; --warn-wash:#DE8B7720;
+  --ok:#57C68F;   --ok-wash:#57C68F1C;
+}
+
+*{box-sizing:border-box;}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--body);font-size:1.0625rem;line-height:1.66;-webkit-font-smoothing:antialiased;}
+.frame{max-width:var(--frame);margin:0 auto;padding:0 1.5rem;}
+@media (max-width:520px){.frame{padding:0 1rem;}}
+.col{max-width:var(--measure);margin-inline:auto;}
+
+/* masthead */
+header.top{border-bottom:1px solid var(--rule);background:var(--surface);}
+.top .frame{display:flex;gap:1rem;align-items:center;justify-content:space-between;padding-block:.8rem;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:.7rem;min-width:0;}
+.mark{display:block;width:30px;height:30px;flex:0 0 30px;border-radius:3px;
+  background:url(/assets/robot.png) center/cover;}
+.kicker{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);}
+.legend-mini{display:flex;gap:.9rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+.legend-mini span{display:flex;align-items:center;gap:.35rem;}
+.legend-mini i{width:9px;height:9px;border-radius:2px;display:block;}
+.sw-s{background:var(--sad);} .sw-t{background:var(--stat);} .sw-u{background:var(--sub);}
+.backlink{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--mono);color:var(--sad);
+  font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;}
+.backlink:hover{text-decoration:underline;}
+
+/* hero */
+.hero{padding:4rem 0 2.4rem;}
+.eyebrow{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--sad);margin:0 0 1.3rem;}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(2.5rem,7.5vw,4.4rem);
+  line-height:.94;letter-spacing:-.035em;margin:0 0 1.4rem;text-wrap:balance;}
+.standfirst{font-size:1.22rem;line-height:1.52;color:var(--ink-soft);margin:0;text-wrap:pretty;}
+
+main{padding:1rem 0;}
+h2{font-family:var(--display);font-weight:700;font-size:1.6rem;line-height:1.18;
+  letter-spacing:-.02em;margin:3.4rem 0 1rem;text-wrap:balance;}
+h2 .claim{display:block;font-family:var(--mono);font-size:.66rem;font-weight:500;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem;}
+p{margin:0 0 1.1rem;}
+a{color:var(--sad);text-decoration-thickness:1px;text-underline-offset:2px;}
+strong{font-weight:600;}
+code{font-family:var(--mono);font-size:.85em;background:var(--sunk);padding:.1em .34em;border-radius:3px;}
+.lede{font-size:1.1rem;}
+ol.steps,ul.steps{padding-left:1.4rem;margin:0 0 1.1rem;}
+ol.steps li,ul.steps li{margin-bottom:.55rem;padding-left:.35rem;}
+blockquote{margin:1.6rem 0;padding:.2rem 0 .2rem 1.1rem;border-left:2px solid var(--sad);
+  color:var(--ink-soft);font-size:1.05rem;line-height:1.6;}
+
+/* interactive figures */
+figure{margin:2.6rem auto;max-width:var(--wide);}
+.fig-head{display:flex;gap:.7rem;align-items:baseline;margin-bottom:.65rem;flex-wrap:wrap;
+  font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;}
+.fig-num{color:var(--sad);font-weight:700;}
+.fig-name{color:var(--muted);font-weight:500;}
+.fig-live{margin-left:auto;color:var(--sub);font-weight:600;}
+.plate{background:var(--surface);border:1px solid var(--rule);border-radius:2px;padding:1.1rem 1rem 1.15rem;}
+.scroller{overflow-x:auto;}
+.plate svg{display:block;width:100%;min-width:600px;height:auto;}
+figcaption{margin-top:.7rem;font-family:var(--mono);font-size:.73rem;line-height:1.6;color:var(--muted);}
+figcaption b{color:var(--ink-soft);font-weight:500;}
+
+.ctl{display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;margin-bottom:.9rem;}
+.ctl.tight{margin-bottom:.5rem;}
+.ctl label{font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;color:var(--muted);
+  display:flex;align-items:center;gap:.5rem;}
+.ctl input[type=range]{width:120px;accent-color:var(--sad);}
+.ctl select{font:inherit;font-family:var(--mono);font-size:.7rem;color:var(--ink);background:var(--surface);
+  border:1px solid var(--rule);border-radius:2px;padding:.3rem .4rem;}
+.ctl input[type=checkbox]{accent-color:var(--sad);}
+.readout{font-family:var(--mono);font-size:.76rem;font-weight:600;color:var(--ink);
+  font-variant-numeric:tabular-nums;min-width:2.2ch;display:inline-block;}
+.seg{display:inline-flex;gap:3px;flex-wrap:wrap;}
+.btn{font:inherit;font-family:var(--mono);font-size:.66rem;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;cursor:pointer;background:var(--ink);color:var(--ground);
+  border:1px solid var(--ink);border-radius:2px;padding:.45rem .8rem;transition:opacity .15s;}
+.btn:hover{opacity:.82;}
+.btn.ghost{background:none;color:var(--muted);border-color:var(--rule);}
+.btn.ghost[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);background:var(--sunk);}
+.ctl .grp{font-family:var(--mono);font-size:.6rem;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:2px;margin-top:.9rem;overflow:hidden;}
+.stat{background:var(--surface);padding:.7rem .8rem;display:flex;flex-direction:column;gap:.15rem;}
+.stat .k{font-family:var(--mono);font-size:.58rem;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);}
+.stat .v{font-family:var(--display);font-weight:700;font-size:1.35rem;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.15;}
+.stat .s{font-family:var(--mono);font-size:.64rem;color:var(--muted);}
+.v-sad{color:var(--sad);} .v-stat{color:var(--stat);} .v-sub{color:var(--sub);} .v-warn{color:var(--warn);}
+
+.note{margin-top:.8rem;font-size:.93rem;line-height:1.55;color:var(--ink-soft);}
+.note b{color:var(--ink);font-weight:600;}
+.verdict{margin-top:.8rem;padding:.65rem .8rem;border-radius:2px;background:var(--sunk);
+  font-size:.93rem;line-height:1.5;color:var(--ink-soft);border-left:2px solid var(--rule);}
+.verdict b{color:var(--ink);font-weight:600;}
+.verdict.ok{background:var(--ok-wash);border-left-color:var(--ok);}
+.verdict.no{background:var(--warn-wash);border-left-color:var(--warn);}
+
+/* how-to and rule cards */
+.howto{margin:0 0 .9rem;font-size:.93rem;line-height:1.55;color:var(--ink-soft);padding:.7rem .85rem;
+  background:var(--sunk);border-radius:2px;}
+.howto b{color:var(--ink);font-weight:600;}
+.howto p{margin:0 0 .5rem;} .howto p:last-child{margin:0;}
+.rule{display:grid;grid-template-columns:8.5rem 1fr;gap:.4rem 1rem;margin:0 0 .9rem;padding:.8rem .95rem;
+  border:1px solid var(--rule);border-left:3px solid var(--sad);border-radius:2px;background:var(--surface);}
+@media (max-width:560px){.rule{grid-template-columns:1fr;gap:.1rem;} .rule dd{margin-bottom:.45rem;}}
+.rule dt{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--sad);padding-top:.22rem;}
+.rule dd{margin:0;font-size:.93rem;line-height:1.5;color:var(--ink-soft);}
+.rule dd b{color:var(--ink);font-weight:600;}
+
+/* lineage table */
+.lineage{width:100%;border-collapse:collapse;margin:1.4rem 0;font-size:.92rem;}
+.lineage caption{caption-side:bottom;font-family:var(--mono);font-size:.72rem;color:var(--muted);
+  text-align:left;padding-top:.55rem;line-height:1.55;}
+.lineage th,.lineage td{border:1px solid var(--rule);padding:.5rem .6rem;text-align:left;vertical-align:top;line-height:1.45;}
+.lineage th{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--muted);background:var(--surface);}
+.lineage td b{font-weight:600;color:var(--ink);}
+.lineage .bad{color:var(--warn);font-weight:600;}
+
+/* footer */
+footer{border-top:1px solid var(--rule);padding:2rem 0 3.5rem;font-family:var(--mono);
+  font-size:.72rem;line-height:1.85;color:var(--muted);}
+footer a{color:var(--sad);}
+:focus-visible{outline:2px solid var(--sad);outline-offset:3px;}
+
+/* figure svg primitives */
+.p-frame{fill:none;stroke:var(--rule);stroke-width:1;}
+.p-grid{stroke:var(--rule-soft);stroke-width:1;}
+.p-rule{stroke:var(--muted);stroke-width:1;}
+.p-gap{stroke:var(--sad);stroke-width:1.5;stroke-dasharray:2 3;}
+.p-sm{font-family:var(--mono);font-size:10px;fill:var(--muted);}
+.p-tag{font-family:var(--mono);font-size:9px;letter-spacing:.12em;fill:var(--muted);}
+.p-lbl{font-family:var(--mono);font-size:10.5px;fill:var(--ink-soft);}
+.s-sad{fill:none;stroke:var(--sad);stroke-width:2.4;stroke-linejoin:round;}
+.s-stat{fill:none;stroke:var(--stat);stroke-width:2;stroke-dasharray:6 4;stroke-linejoin:round;}
+.s-sub{fill:none;stroke:var(--sub);stroke-width:2.4;stroke-linejoin:round;}
+.f-sad{fill:var(--sad);}
+.f-stat{fill:var(--stat);}
+.f-sub{fill:var(--sub);}
+</style>
+</head>
+<body>
+<header class="top"><div class="frame">
+  <span class="brand">
+    <span class="mark" role="img" aria-label="Site mark"></span>
+    <span class="kicker">Harness Design Notes</span>
+  </span>
+  <span class="legend-mini">
+    <span><i class="sw-s"></i>environment</span>
+    <span><i class="sw-t"></i>suite</span>
+    <span><i class="sw-u"></i>agent</span>
+  </span>
+  <a class="backlink" href="/">&#8592; All notes</a>
+</div></header>
+
+<div class="hero"><div class="frame">
+  <p class="eyebrow">Safety evaluation</p>
+  <h1>Let's Get Sadic With Agent&nbsp;Evals</h1>
+  <p class="standfirst">The way we evaluate agents is inherited from how we tested classic software, then from how we benchmarked ML models. Both traditions rest on one assumption, and agents break it: <em>that the thing under test doesn't study the test.</em> A reasoning model with a tool loop does. A frozen benchmark is a solved artifact, not a measurement instrument.</p>
+</div></header>
+
+<main><div class="frame">
+
+<div class="col">
+<h2><span class="claim">The lineage</span>We test agents the way we tested software, because that's all we knew</h2>
+
+<p class="lede">Every evaluation regime carries the assumptions of the era that produced it. Ours is a stack of two.</p>
+
+<p>The first layer is <strong>classic software testing</strong>. The unit test, the regression suite, CI: a fixed list of inputs, a fixed list of expected outputs, red or green. Its hidden assumption is determinism in both directions — the code doesn't change between runs unless a human changes it, and the test itself is written by someone with no incentive to game it. The test is a mirror, and mirrors don't move.</p>
+
+<p>The second layer is <strong>machine-learning benchmarking</strong>. The held-out test set: still frozen, still fixed at release, but now statistical — a sample from a distribution, with error bars, meant to estimate a generalisation rate rather than to verify a spec. The benchmark gave ML a shared, comparable number, and that number built the field's entire reward structure: leaderboards, citations, funding.</p>
+
+<p>Agent evaluation inherited both wholesale. A static suite of tasks, fixed at release, scored by pass/fail or pass rate. SWE-bench, HumanEval, GAIA, the agent-benchmark generation — all of them are the held-out test set wearing a sandbox. What did not get inherited was the assumption that made both ancestors honest, because nobody thought to check it:</p>
+
+<blockquote>Neither classic software nor a classic ML model studies the test. An agent is trained on the public internet where the test lives, and a reasoning model is given a budget of thinking in which studying the test <em>is</em> the task.</blockquote>
+
+<p>The landscape moved, and engineering and safety teams were left holding instruments from the old one. Three generations of test, one broken assumption. The table below is the whole argument in miniature.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 1</span><span class="fig-name">Three generations of test, one broken assumption</span></div>
+  <div class="plate" style="padding:0;border:none;background:none;">
+    <div class="scroller"><table class="lineage">
+      <thead><tr>
+        <th scope="col">Generation</th>
+        <th scope="col">Instrument</th>
+        <th scope="col">What it assumes</th>
+        <th scope="col">Holds for an agent?</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Classic software</b><br><span class="kicker">1970s&#8211;</span></td>
+          <td>Unit tests, regression suites, CI</td>
+          <td>The code doesn't change unless a human changes it; the test writer has no stake in the outcome</td>
+          <td class="bad">No</td>
+        </tr>
+        <tr>
+          <td><b>ML benchmark</b><br><span class="kicker">2000s&#8211;</span></td>
+          <td>Held-out test set, leaderboard</td>
+          <td>The test set is statistically independent of the training data</td>
+          <td class="bad">No</td>
+        </tr>
+        <tr>
+          <td><b>Agent suite</b><br><span class="kicker">2023&#8211;</span></td>
+          <td>Frozen task suite in a sandbox</td>
+          <td>Inherits both of the above, adds a sandbox nobody updates</td>
+          <td class="bad">No</td>
+        </tr>
+      </tbody>
+    </table></div>
+  </div>
+  <figcaption><b>The argument in one table.</b> The agent suite inherits the frozen-instrument model from both ancestors and the training-data exposure from neither's threat model. Dates are approximate; the point is the inheritance, not the chronology.</figcaption>
+</figure>
+
+<div class="col">
+<h2><span class="claim">Four failure modes</span>How a static suite dies</h2>
+
+<p>A static benchmark against a learning subject fails in four distinguishable ways. They compound: each one accelerates the others.</p>
+
+<ol class="steps">
+  <li><strong>Saturation.</strong> The suite is finite, capability is not. Frontier reasoning models reach high-90s on a benchmark within months of its release, and from there the number carries no signal: a 97 and a 98 differ by a handful of ambiguous items, not by capability. The benchmark has become a quiz the model has effectively memorised the shape of.</li>
+  <li><strong>Contamination.</strong> The test items are public, training corpora are scraped from the public internet, and the scrubbing that labs perform is best-effort by construction. You cannot prove a negative here — you cannot demonstrate absence of leakage, only fail to find it. Any score on a public suite is therefore an upper bound on capability with an unknown contamination component.</li>
+  <li><strong>Goodharting.</strong> A reasoning model optimises the metric as stated, not the behaviour intended. It finds the exploit in the task's checker, the answer that satisfies the grader without satisfying the goal — reward hacking, documented increasingly often in frontier reasoning runs. The static suite becomes adversarial input the moment a strong optimiser reads its grading function.</li>
+  <li><strong>Snapshot vs. rate.</strong> The deepest failure. A frozen suite measures capability at a moment. Safety decisions need the <em>derivative</em> — how fast is this kind of failure approaching, how much does the next training run move the needle. A static instrument returns a photograph when what safety planning needs is a speedometer.</li>
+</ol>
+
+<p>The figure below makes the compounding concrete: the same model family evaluated repeatedly on a static suite as it improves. The published score keeps rising after true capability plateaus on the distribution the suite was meant to estimate — because what is rising is fit to the suite, not skill on the task.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 2</span><span class="fig-name">Published score keeps rising after true skill stops</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="howto"><b>How to read it.</b> The <b>grey line</b> is a model's true skill on the underlying task distribution, improving over successive training runs. The <b>teal line</b> is what the static suite reports. The <b>orange slider</b> is contamination: what fraction of suite items the model has effectively seen in training. <b>Move it</b> and watch the gap between reported and true open.</p></div>
+    <div class="ctl">
+      <label for="f2-cont">contamination <input type="range" id="f2-cont" min="0" max="90" value="25"><span class="readout" id="f2-contv">25%</span></label>
+      <label for="f2-gp">goodhart strength <input type="range" id="f2-gp" min="0" max="100" value="35"><span class="readout" id="f2-gpv">35%</span></label>
+      <button class="btn ghost" id="f2-new">New draw</button>
+    </div>
+    <div class="scroller"><svg id="f2-svg" viewBox="0 0 800 300" role="img" aria-label="True skill versus reported suite score over training runs"></svg></div>
+    <div class="stats" id="f2-stats"></div>
+    <p class="note" id="f2-note"></p>
+  </div>
+  <figcaption><b>A model, not a measurement.</b> True skill is drawn as a saturating curve (logistic, illustrative parameters); the reported score adds a contamination term proportional to the slider and a Goodhart term that grows once the model is strong enough to exploit the checker. The shape is the finding, not any number on the axes.</figcaption>
+</figure>
+
+<div class="col">
+<p>One more thing the figure can't show: the <em>release treadmill</em>. Benchmarks ship, saturate in months, get replaced, and the replacement is typically generated in the same way as the one it replaced — written by people, posted publicly, scraped within the week. The static suite isn't merely an obsolete instrument; it is an instrument with a half-life, in a field that renews the supply chain annually and calls that progress.</p>
+
+<h2><span class="claim">The alternative tradition</span>Every field that measures adaptive subjects learned the same rule</h2>
+
+<p>Statics fail on adaptive subjects, and this is not a new discovery — it is the founding observation of several older disciplines. Biology never trusted a single fixed antibiotic assay for long: resistance evolves, so the assay has to evolve. Cryptography assumes the adversary studies the cipher, which is why systems are designed to survive full disclosure of the mechanism. Chess and Go evaluation moved from fixed puzzle sets to self-play: the environment's difficulty is generated by the players themselves, so it never saturates and never sits still. Anti-doping labs re-derive their panels every cycle precisely because the test is public and the subject adapts.</p>
+
+<p>All of these share one design rule, and it is the rule agent evaluation has not yet absorbed:</p>
+
+<blockquote>An instrument for an adaptive subject must adapt at least as fast as the subject does. If the subject's rate of adaptation exceeds the instrument's, the measurement converges to zero.</blockquote>
+
+<p>Applied to agents, "evolutive environment" stops being a slogan and becomes a set of concrete mechanisms. None is exotic; what is new is requiring them <em>together</em>.</p>
+
+<dl class="rule"><dt>Procedural tasks</dt><dd>Tasks <b>generated</b> per evaluation run from a generator with parameters, not drawn from a frozen list. A million instances of one distribution beat a thousand instances of one writing session. Saturation becomes a generator-knob question, not a scrap-the-benchmark question.</dd></dl>
+<dl class="rule"><dt>Mutating environments</dt><dd>The sandbox itself changes between runs: different tool versions, different failure modes injected, different distractors. The agent cannot cache a strategy across runs because the run is not the same problem twice. This is what "evolutive" means mechanically.</dd></dl>
+<dl class="rule"><dt>Adaptive selection</dt><dd>The environment observes the agent and re-weights: tasks the agent fails get denser, tasks it solves get variants. Like a staleness-weighted question bank — the instrument follows the subject's frontier instead of a fixed point behind it.</dd></dl>
+<dl class="rule"><dt>Adversarial grading</dt><dd>Grading that assumes the agent will exploit the checker: execution-based where possible, multiple independent judges where not, and the checker itself red-teamed before deployment. The grader is part of the attack surface.</dd></dl>
+<dl class="rule"><dt>Private re-derivation</dt><dd>A held-out core that is never published, regenerated periodically, and used to audit the public instrument. The public suite is for comparability; the private core is for truth. Labs already do this informally; the proposal is to make it structural.</dd></dl>
+
+<p>Early versions of this exist and are worth naming without turning this note into a survey: METR's time-horizon evaluations re-derive task suites against each new frontier model; SWE-bench itself has had to fork and filter (SWE-bench Verified, Live) to stay meaningful; several labs generate evaluation items with models and validate with humans. Each is a partial adoption of the rule above. None yet treats the <em>environment</em>, as opposed to the <em>item set</em>, as the thing that evolves.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 3</span><span class="fig-name">Two instruments chasing one moving subject</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="howto"><b>How to read it.</b> Time runs left to right. The <b>orange line</b> is agent capability, drifting upward. The <b>grey line</b> is a static suite's difficulty: fixed at release, so the subject walks past it. The <b>teal line</b> is an evolutive environment that re-aims at the subject's frontier at a rate you control with the <b>slider</b>. The measurement that matters is the <b>gap</b> — how far the instrument trails the subject. Set the environment's update rate below the agent's improvement rate and watch it degrade into a static suite.</p></div>
+    <div class="ctl">
+      <label for="f3-env">environment update rate <input type="range" id="f3-env" min="0" max="100" value="65"><span class="readout" id="f3-envv">65</span></label>
+      <button class="btn ghost" id="f3-new">New draw</button>
+    </div>
+    <div class="scroller"><svg id="f3-svg" viewBox="0 0 800 300" role="img" aria-label="Capability drift against static and adaptive instruments"></svg></div>
+    <div class="stats" id="f3-stats"></div>
+    <p class="note" id="f3-note"></p>
+  </div>
+  <figcaption><b>A simulation, not a forecast.</b> Capability drifts as a random walk with upward trend; the static suite is flat; the adaptive environment follows with lag proportional to (100 &#8722; rate). The rule being illustrated: an instrument that adapts slower than the subject measures the past.</figcaption>
+</figure>
+
+<div class="col">
+<h2><span class="claim">The costs, stated</span>What evolutive environments give up</h2>
+
+<p>Strawman insurance: the adaptive instrument is not free, and a page arguing for it that hides the costs is doing the thing it criticises.</p>
+
+<ul class="steps">
+  <li><strong>Reproducibility.</strong> A static suite is the same test for everyone, forever. An evolutive environment is not, by design. Comparability has to be rebuilt on shared <em>generators</em> with versioned seeds rather than shared item sets — a real engineering discipline that barely exists yet.</li>
+  <li><strong>Generator gaming.</strong> The environment now has an author, and the author is attackable. A procedurally generated task has a generator's biases and blind spots; a model-generated task inherits its generator's blind spots <em>and</em> can leak its generator into the thing being trained on. The instrument itself becomes a surface for contamination and Goodharting, one level up.</li>
+  <li><strong>Cost.</strong> A frozen suite is cheap to run and expensive to build once. An evolutive environment is expensive to run — generation, sandbox mutation, grading, re-derivation — forever. Someone has to pay for instrument maintenance as an ongoing line item, which the benchmark economy never did.</li>
+  <li><strong>Interpretability of the number.</strong> "87% on SWE-bench Verified" is a sentence with a footnote chain everyone shares. "87% on environment v47, seed set B" is a sentence whose meaning depends on machinery the reader has to trust or inspect. The community loses the lazy legibility of the leaderboard and has to replace it with actual provenance.</li>
+</ul>
+
+<p>The claim, stated precisely, is therefore <em>not</em> that static suites are useless. A static suite is a fine <strong>regression harness</strong>: when you change your serving stack, your prompts, your harness glue, you want a fixed test that doesn't move, because <em>you</em> are the thing that changed. The claim is about what instrument you trust for a <strong>safety decision</strong> — where the thing under test is an optimiser that reads your measurement and where the question is a rate, not a snapshot. There, a static suite is a solved artifact. Necessary for engineering. Obsolete for safety.</p>
+
+<h2><span class="claim">What to do Monday</span>The takeaway</h2>
+
+<p>For a safety team: stop treating benchmark scores as capability estimates; treat them as upper bounds with an unknown contamination term, and put the weight of evidence on privately held, periodically re-derived, procedurally generated evaluations. Measure the time-horizon and the exploit-rate, not the pass-rate. Budget for instrument maintenance the way you budget for the models themselves — the instrument is not infrastructure you build once, it is an adversary you have to keep fed.</p>
+
+<p>For an engineering team: your evals are a regression harness, and that is legitimately valuable — but do not let a green suite tell you the agent is safe, and do not panic when a frontier model goes from 40% to 95% on your favourite suite in a quarter. That jump is the suite dying, not the model ascending.</p>
+
+<p>The meta-point is the oldest one in measurement: a fixed test against an adaptive subject is not a hard test, it is an <em>already-lost</em> test. The only evaluation that stays honest against an optimiser is one that keeps moving. Sadism, in this one narrow sense, is a methodological requirement: the environment has to want to beat the agent, permanently, or it stops measuring anything.</p>
+</div>
+
+</div></main>
+
+<footer><div class="frame">
+  Figures marked as models or simulations are analytical, not measurements; assumptions are stated in each caption.<br>
+  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a><br>
+  Page counts via GoatCounter: no cookies, no personal data, nothing that identifies you.
+</div></footer>
+
+<script>
+(function(){
+"use strict";
+function $(id){ return document.getElementById(id); }
+function T(x,y,s,cls,anchor,extra){ return '<text x="'+x+'" y="'+y+'" class="'+cls+'"'+(anchor?' text-anchor="'+anchor+'"':'')+(extra||'')+'>'+s+'</text>'; }
+function R(x,y,w,h,fill,rx,extra){ return '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+Math.max(0,w).toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" rx="'+(rx||0)+'"'+(fill?' class="'+fill+'"':'')+(extra||'')+'/>'; }
+
+/* seeded rng so "New draw" is a fresh but stable-looking curve */
+function mulberry(seed){ return function(){ seed|=0; seed=seed+0x6D2B79F5|0; var t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+/* ---------- Fig 2: contamination + goodhart on a static suite ---------- */
+(function(){
+  var svg=$('f2-svg'), cont=0.25, gp=0.35, seed=7;
+  var N=40; // training runs
+
+  function series(){
+    var rnd=mulberry(seed*9973+Math.round(cont*100));
+    var runs=[], trueS=[], repS=[];
+    for(var i=0;i<N;i++){
+      var x=i/(N-1);
+      var trueSkill=0.98/(1+Math.exp(-(x-0.45)*7))+ (rnd()-0.5)*0.012;
+      // suite score = true skill + contamination recall + goodhart exploit term
+      var contam=cont*0.55*(0.35+0.65*x);           // memorised items surface more as model strengthens
+      var good=gp*0.35*Math.max(0,x-0.45)/0.55;   // exploits checker once strong enough
+      var reported=Math.min(1.25, trueSkill+contam+good + (rnd()-0.5)*0.008);
+      trueS.push(trueSkill); repS.push(reported);
+      runs.push(i+1);
+    }
+    return {runs:runs, trueS:trueS, repS:repS};
+  }
+
+  function draw(){
+    var S=series();
+    var W=800,H=300,x0=58,y0=34,h=210,w=W-x0-20;
+    function X(i){ return x0+i/(N-1)*w; }
+    function Y(v){ return y0+h-Math.min(v,1.02)*h; }
+    var o='';
+    o+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" class="p-frame"/>';
+    for(var g=0;g<=4;g++){ var v=g/4, yy=Y(v);
+      o+='<line x1="'+x0+'" y1="'+yy+'" x2="'+(x0+w)+'" y2="'+yy+'" class="p-grid"/>';
+      o+=T(x0-8,yy+3.5,(v*100)+'%','p-sm','end');
+    }
+    [1,10,20,30,40].forEach(function(r){ o+=T(X(r-1),y0+h+16,'run '+r,'p-sm','middle'); });
+    o+=T(x0+w/2,y0+h+34,'SUCCESSIVE TRAINING RUNS','p-tag','middle');
+    // crossover marker: where reported exceeds true by >5pts
+    var ci=-1; for(var i=0;i<N;i++){ if(S.repS[i]-S.trueS[i]>0.05){ ci=i; break; } }
+    if(ci>0){
+      o+='<line x1="'+X(ci)+'" y1="'+y0+'" x2="'+X(ci)+'" y2="'+(y0+h)+'" class="p-rule" stroke-dasharray="4 3"/>';
+      o+=T(X(ci)+8,y0+14,'reported pulls away','p-lbl',null,' style="fill:var(--sub);font-weight:600"');
+    }
+    function path(arr,cls){ return '<polyline points="'+arr.map(function(v,i){ return X(i).toFixed(1)+','+Y(v).toFixed(1); }).join(' ')+'" class="'+cls+'"/>'; }
+    o+=path(S.trueS,'s-stat');
+    o+=path(S.repS,'s-sad');
+    o+=R(x0+12,42,14,4,'f-stat',1)+T(84,47,'true skill on the task distribution','p-sm');
+    o+=R(x0+12,62,14,4,'f-sad',1)+T(84,67,'what the static suite reports','p-sm');
+    svg.setAttribute('viewBox','0 0 800 300'); svg.innerHTML=o;
+
+    var last=cont? (S.repS[N-1]-S.trueS[N-1]) : 0;
+    var rep=S.repS[N-1];
+    $('f2-stats').innerHTML=
+      '<div class="stat"><span class="k">final true skill</span><span class="v">'+Math.round(S.trueS[N-1]*100)+'%</span><span class="s">on the distribution</span></div>'+
+      '<div class="stat"><span class="k">final suite score</span><span class="v v-sad">'+(rep>1?'100%+':Math.round(rep*100)+'%')+'</span><span class="s">'+(rep>1?'pegged, items exhausted':'what the leaderboard shows')+'</span></div>'+
+      '<div class="stat"><span class="k">inflation</span><span class="v v-sub">+'+Math.round(last*100)+' pts</span><span class="s">contamination + goodhart</span></div>'+
+      '<div class="stat"><span class="k">instrument verdict</span><span class="v'+(last>0.12?' v-warn':'')+'">'+(last>0.12?'dead':(last>0.05?'dying':'usable'))+'</span><span class="s">as a capability estimate</span></div>';
+    $('f2-note').innerHTML='At '+Math.round(cont*100)+'% contamination and '+Math.round(gp*100)+'% goodhart pressure, the suite overstates capability by <b>'+Math.round(last*100)+' points</b> at the frontier'+(ci>0?', and starts diverging around run '+ci:'')+'. The suite still works as a <i>regression harness</i> throughout — it just stopped measuring capability.';
+  }
+
+  $('f2-cont').addEventListener('input',function(){ cont=this.value/100; $('f2-contv').textContent=this.value+'%'; draw(); });
+  $('f2-gp').addEventListener('input',function(){ gp=this.value/100; $('f2-gpv').textContent=this.value+'%'; draw(); });
+  $('f2-new').addEventListener('click',function(){ seed=(seed*31+17)%9973; draw(); });
+  draw();
+})();
+
+/* ---------- Fig 3: static vs evolutive instrument chasing a drifting agent ---------- */
+(function(){
+  var svg=$('f3-svg'), rate=0.65, seed=11;
+  var N=60;
+  var sFix=0.30; // static suite fixed at release difficulty
+
+  function series(){
+    var rnd=mulberry(seed*7919+Math.round(rate*100));
+    var agent=[], env=[], stat=[];
+    var a=0.28, drift=0.0042;
+    // static suite fixed at release difficulty
+    var sFix=0.30;
+    // evolutive env: follows agent frontier with lag depending on rate
+    var lag=(1-rate);           // 0 = perfectly tracking
+    var e=0.30, prevA=a;
+    for(var i=0;i<N;i++){
+      a+= drift + (rnd()-0.5)*0.011;
+      a=Math.min(0.99,Math.max(0.02,a));
+      // env re-aims at where the agent was some steps ago
+      var target=prevA; prevA=a;
+      e+= (target-e)*(1-lag*0.92)*0.9 + (rnd()-0.5)*0.006;
+      e=Math.min(0.99,Math.max(0.02,e));
+      agent.push(a); env.push(e); stat.push(sFix);
+    }
+    return {agent:agent,env:env,stat:stat};
+  }
+
+  function draw(){
+    var S=series();
+    var W=800,H=300,x0=58,y0=34,h=210,w=W-x0-20;
+    function X(i){ return x0+i/(N-1)*w; }
+    function Y(v){ return y0+h-v*h; }
+    var o='';
+    o+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" class="p-frame"/>';
+    for(var g=0;g<=4;g++){ var v=g/4, yy=Y(v);
+      o+='<line x1="'+x0+'" y1="'+yy+'" x2="'+(x0+w)+'" y2="'+yy+'" class="p-grid"/>';
+      o+=T(x0-8,yy+3.5,(v*100)+'%','p-sm','end');
+    }
+    [1,15,30,45,60].forEach(function(m){ o+=T(X(m-1),y0+h+16,'t'+m,'p-sm','middle'); });
+    o+=T(x0+w/2,y0+h+34,'TIME','p-tag','middle');
+    function path(arr,cls){ return '<polyline points="'+arr.map(function(v,i){ return X(i).toFixed(1)+','+Y(v).toFixed(1); }).join(' ')+'" class="'+cls+'"/>'; }
+    o+=path(S.agent,'s-sub');
+    o+=path(S.stat,'s-stat');
+    o+=path(S.env,'s-sad');
+    // trail gaps at the end
+    var gapS=Math.max(0,S.agent[N-1]-sFix), gapE=Math.max(0,S.agent[N-1]-S.env[N-1]);
+    o+='<line x1="'+X(N-1)+'" y1="'+Y(S.env[N-1])+'" x2="'+X(N-1)+'" y2="'+Y(S.agent[N-1])+'" class="p-gap"/>';
+    o+=T(X(N-1)-6,(Y(S.env[N-1])+Y(S.agent[N-1]))/2+3,Math.round(gapE*100)+'&#8202;pts','p-lbl','end',' style="fill:var(--sad);font-weight:600"');
+    o+=T(X(N-1)-6,Y(S.agent[N-1])+16,'agent','p-lbl','end',' style="fill:var(--sub)"');
+    o+=T(X(2),Y(sFix)-8,'static suite (fixed at release)','p-lbl',null,' style="fill:var(--stat)"');
+    o+=T(X(N*0.42),Y(S.env[Math.round(N*0.42)])-9,'evolutive environment','p-lbl',null,' style="fill:var(--sad)"');
+    svg.setAttribute('viewBox','0 0 800 300'); svg.innerHTML=o;
+
+    var saturation=gapS, meas=1-Math.min(1,gapE/0.5);
+    $('f3-stats').innerHTML=
+      '<div class="stat"><span class="k">static suite gap</span><span class="v v-warn">'+Math.round(gapS*100)+' pts</span><span class="s">subject walks past it</span></div>'+
+      '<div class="stat"><span class="k">evolutive gap</span><span class="v v-sad">'+Math.round(gapE*100)+' pts</span><span class="s">trails the frontier</span></div>'+
+      '<div class="stat"><span class="k">measurement validity</span><span class="v'+(rate>0.45?' v-sad':rate>0.2?' v-sub':' v-warn')+'">'+(rate>0.75?'tracking':rate>0.45?'lagging':rate>0.2?'stale':'deceased')+'</span><span class="s">at this update rate</span></div>';
+    $('f3-note').innerHTML= rate>0.75
+      ? 'The environment re-aims fast enough to sit on the agent’s frontier. This is the regime the rule asks for: the instrument adapts at least as fast as the subject.'
+      : rate>0.45
+      ? 'Lagging. The environment trails the frontier by <b>'+Math.round(gapE*100)+' point'+(Math.round(gapE*100)===1?'':'s')+'</b>: better than a frozen suite, but the hardest agents are already solving tasks the instrument hasn’t noticed exist.'
+      : rate>0.2
+      ? 'Stale. The environment updates too slowly; it measures where the agent <i>was</i>. Functionally a static suite with extra steps.'
+      : 'Deceased. Below the subject’s adaptation rate, the evolutive environment collapses into exactly the static suite it was meant to replace. <b>The rule cuts both ways.</b>';
+  }
+
+  $('f3-env').addEventListener('input',function(){ rate=this.value/100; $('f3-envv').textContent=this.value; draw(); });
+  $('f3-new').addEventListener('click',function(){ seed=(seed*31+17)%7919; draw(); });
+  draw();
+})();
+})();
+</script>
+
+<script>
+// GoatCounter: cookieless page counts, no personal data, no consent banner.
+// Production host only, so local previews are not counted.
+if (location.hostname === "swalla02.github.io") {
+  var gc = document.createElement("script");
+  gc.async = true;
+  gc.src = "//gc.zgo.at/count.js";
+  gc.setAttribute("data-goatcounter", "https://swalla02.goatcounter.com/count");
+  document.head.appendChild(gc);
+}
+</script>
+</body>
+</html>
