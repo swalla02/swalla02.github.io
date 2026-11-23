@@ -1,0 +1,595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cache the Reasoning, Not the Answer</title>
+<meta name="description" content="A reading of CPU-ARC (arXiv 2611.09891): turning a frontier model's reasoning trace into parameterised code that runs on a CPU and a 1B model. How the loop works, where the 16-291x savings come from, and where the method breaks.">
+<link rel="canonical" href="https://swalla02.github.io/reasoning-caches/">
+<link rel="icon" href="/assets/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png?v=1">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png?v=1">
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=1">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Harness Design Notes">
+<meta property="og:title" content="Cache the Reasoning, Not the Answer">
+<meta property="og:description" content="CPU-ARC turns a frontier model's reasoning into code a 1B model can drive. The savings grow with problem difficulty, and shrink with everything that makes a task hard to program.">
+<meta property="og:url" content="https://swalla02.github.io/reasoning-caches/">
+<meta property="og:image" content="https://swalla02.github.io/assets/og-ceiling.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Cache the Reasoning, Not the Answer">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cache the Reasoning, Not the Answer">
+<meta name="twitter:description" content="CPU-ARC turns a frontier model's reasoning into code a 1B model can drive. The savings grow with problem difficulty, and shrink with everything that makes a task hard to program.">
+<meta name="twitter:image" content="https://swalla02.github.io/assets/og-ceiling.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#F2F4F3; --surface:#FBFCFB; --sunk:#E8ECEA;
+  --ink:#111B1C; --ink-soft:#3D4E4E; --muted:#5E7070;
+  --rule:#D3DBD9; --rule-soft:#E2E8E6;
+  --cache:#0E7C86;  --cache-wash:#0E7C861C;   /* the cache / CPU path */
+  --llm:#4C5C86;    --llm-wash:#4C5C861C;     /* the frontier model */
+  --build:#C2711A;  --build-wash:#C2711A20;   /* the builder */
+  --warn:#A24A38;   --warn-wash:#A24A381C;
+  --ok:#1F7350;     --ok-wash:#1F73501C;
+
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --body:"Source Serif 4",Georgia,serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --frame:1020px; --measure:37rem; --wide:920px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0C1416; --surface:#121D1F; --sunk:#182628;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1A2A2C;
+  --cache:#4FD4CB; --cache-wash:#4FD4CB1F;
+  --llm:#8FA0CC;   --llm-wash:#8FA0CC24;
+  --build:#E5A54E; --build-wash:#E5A54E24;
+  --warn:#DE8B77;  --warn-wash:#DE8B7720;
+  --ok:#57C68F;    --ok-wash:#57C68F1C;
+}}
+:root[data-theme="dark"]{
+  --ground:#0C1416; --surface:#121D1F; --sunk:#182628;
+  --ink:#DCE6E4; --ink-soft:#A9BAB8; --muted:#879998;
+  --rule:#223234; --rule-soft:#1A2A2C;
+  --cache:#4FD4CB; --cache-wash:#4FD4CB1F;
+  --llm:#8FA0CC;   --llm-wash:#8FA0CC24;
+  --build:#E5A54E; --build-wash:#E5A54E24;
+  --warn:#DE8B77;  --warn-wash:#DE8B7720;
+  --ok:#57C68F;    --ok-wash:#57C68F1C;
+}
+
+*{box-sizing:border-box;}
+body{margin:0;background:var(--ground);color:var(--ink);
+  font-family:var(--body);font-size:1.0625rem;line-height:1.66;-webkit-font-smoothing:antialiased;}
+.frame{max-width:var(--frame);margin:0 auto;padding:0 1.5rem;}
+@media (max-width:520px){.frame{padding:0 1rem;}}
+.col{max-width:var(--measure);margin-inline:auto;}
+
+/* masthead */
+header.top{border-bottom:1px solid var(--rule);background:var(--surface);}
+.top .frame{display:flex;gap:1rem;align-items:center;justify-content:space-between;padding-block:.8rem;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:.7rem;min-width:0;}
+.mark{display:block;width:30px;height:30px;flex:0 0 30px;border-radius:3px;
+  background:url(/assets/robot.png) center/cover;}
+.kicker{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.17em;text-transform:uppercase;color:var(--muted);}
+.legend-mini{display:flex;gap:.9rem;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);flex-wrap:wrap;}
+.legend-mini span{display:flex;align-items:center;gap:.35rem;}
+.legend-mini i{width:9px;height:9px;border-radius:2px;display:block;}
+.sw-c{background:var(--cache);} .sw-l{background:var(--llm);} .sw-b{background:var(--build);}
+.backlink{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--mono);color:var(--cache);
+  font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;text-decoration:none;}
+.backlink:hover{text-decoration:underline;}
+
+/* hero */
+.hero{padding:4rem 0 2.4rem;}
+.eyebrow{font-family:var(--mono);font-size:.68rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--cache);margin:0 0 1.3rem;}
+h1{font-family:var(--display);font-weight:800;font-size:clamp(2.5rem,7.5vw,4.4rem);
+  line-height:.94;letter-spacing:-.035em;margin:0 0 1.4rem;text-wrap:balance;}
+.standfirst{font-size:1.22rem;line-height:1.52;color:var(--ink-soft);margin:0;text-wrap:pretty;max-width:46rem;}
+.source{margin-top:1.2rem;font-family:var(--mono);font-size:.72rem;color:var(--muted);}
+
+main{padding:1rem 0;}
+h2{font-family:var(--display);font-weight:700;font-size:1.6rem;line-height:1.18;
+  letter-spacing:-.02em;margin:3.4rem 0 1rem;text-wrap:balance;}
+h2 .claim{display:block;font-family:var(--mono);font-size:.66rem;font-weight:500;
+  letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem;}
+p{margin:0 0 1.1rem;}
+a{color:var(--cache);text-decoration-thickness:1px;text-underline-offset:2px;}
+strong{font-weight:600;}
+code{font-family:var(--mono);font-size:.85em;background:var(--sunk);padding:.1em .34em;border-radius:3px;}
+.lede{font-size:1.1rem;}
+ol.steps,ul.steps{padding-left:1.4rem;margin:0 0 1.1rem;}
+ol.steps li,ul.steps li{margin-bottom:.55rem;padding-left:.35rem;}
+blockquote{margin:1.6rem 0;padding:.2rem 0 .2rem 1.1rem;border-left:2px solid var(--cache);
+  color:var(--ink-soft);font-size:1.05rem;line-height:1.6;}
+pre.code{font-family:var(--mono);font-size:.78rem;line-height:1.55;background:var(--surface);
+  border:1px solid var(--rule);border-radius:2px;padding:.9rem 1rem;overflow-x:auto;margin:0 0 1.2rem;color:var(--ink-soft);}
+pre.code .k{color:var(--cache);font-weight:600;}
+pre.code .c{color:var(--muted);}
+
+/* figures */
+figure{margin:2.6rem auto;max-width:var(--wide);}
+.fig-head{display:flex;gap:.7rem;align-items:baseline;margin-bottom:.65rem;flex-wrap:wrap;
+  font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;}
+.fig-num{color:var(--cache);font-weight:700;}
+.fig-name{color:var(--muted);font-weight:500;}
+.fig-live{margin-left:auto;color:var(--build);font-weight:600;}
+.plate{background:var(--surface);border:1px solid var(--rule);border-radius:2px;padding:1.1rem 1rem 1.15rem;}
+.scroller{overflow-x:auto;}
+.plate svg{display:block;width:100%;min-width:640px;height:auto;}
+figcaption{margin-top:.7rem;font-family:var(--mono);font-size:.73rem;line-height:1.6;color:var(--muted);}
+figcaption b{color:var(--ink-soft);font-weight:500;}
+
+.ctl{display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;margin-bottom:.9rem;}
+.ctl label{font-family:var(--mono);font-size:.66rem;letter-spacing:.06em;color:var(--muted);
+  display:flex;align-items:center;gap:.5rem;}
+.ctl input[type=range]{width:130px;accent-color:var(--cache);}
+.readout{font-family:var(--mono);font-size:.76rem;font-weight:600;color:var(--ink);
+  font-variant-numeric:tabular-nums;min-width:3ch;display:inline-block;}
+.seg{display:inline-flex;gap:3px;flex-wrap:wrap;}
+.btn{font:inherit;font-family:var(--mono);font-size:.64rem;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;cursor:pointer;background:none;color:var(--muted);
+  border:1px solid var(--rule);border-radius:2px;padding:.4rem .65rem;transition:opacity .15s;}
+.btn:hover{color:var(--ink);}
+.btn[aria-pressed="true"]{color:var(--ink);border-color:var(--ink);background:var(--sunk);}
+.ctl .grp{font-family:var(--mono);font-size:.6rem;font-weight:600;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);}
+
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:2px;margin-top:.9rem;overflow:hidden;}
+.stat{background:var(--surface);padding:.7rem .8rem;display:flex;flex-direction:column;gap:.15rem;}
+.stat .k{font-family:var(--mono);font-size:.58rem;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);}
+.stat .v{font-family:var(--display);font-weight:700;font-size:1.35rem;letter-spacing:-.03em;
+  font-variant-numeric:tabular-nums;line-height:1.15;}
+.stat .s{font-family:var(--mono);font-size:.64rem;color:var(--muted);}
+.v-c{color:var(--cache);} .v-l{color:var(--llm);} .v-b{color:var(--build);} .v-warn{color:var(--warn);} .v-ok{color:var(--ok);}
+
+.note{margin-top:.8rem;font-size:.93rem;line-height:1.55;color:var(--ink-soft);}
+.note b{color:var(--ink);font-weight:600;}
+.howto{margin:0 0 .9rem;font-size:.93rem;line-height:1.55;color:var(--ink-soft);padding:.7rem .85rem;
+  background:var(--sunk);border-radius:2px;}
+.howto b{color:var(--ink);font-weight:600;}
+
+.rule{display:grid;grid-template-columns:8.5rem 1fr;gap:.4rem 1rem;margin:0 0 .9rem;padding:.8rem .95rem;
+  border:1px solid var(--rule);border-left:3px solid var(--cache);border-radius:2px;background:var(--surface);}
+.rule.warn{border-left-color:var(--warn);}
+.rule.warn dt{color:var(--warn);}
+@media (max-width:560px){.rule{grid-template-columns:1fr;gap:.1rem;} .rule dd{margin-bottom:.45rem;}}
+.rule dt{font-family:var(--mono);font-size:.62rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--cache);padding-top:.22rem;}
+.rule dd{margin:0;font-size:.93rem;line-height:1.5;color:var(--ink-soft);}
+.rule dd b{color:var(--ink);font-weight:600;}
+
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-size:.9rem;min-width:640px;}
+.tbl caption{caption-side:bottom;font-family:var(--mono);font-size:.72rem;color:var(--muted);
+  text-align:left;padding-top:.55rem;line-height:1.55;}
+.tbl th,.tbl td{border:1px solid var(--rule);padding:.45rem .6rem;text-align:right;vertical-align:top;line-height:1.4;
+  font-variant-numeric:tabular-nums;}
+.tbl th:first-child,.tbl td:first-child{text-align:left;}
+.tbl th{font-family:var(--mono);font-size:.6rem;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);background:var(--surface);}
+.tbl td{background:var(--surface);}
+.tbl td b{font-weight:600;color:var(--ink);}
+.tbl .up{color:var(--ok);font-weight:600;}
+.tbl .dn{color:var(--warn);font-weight:600;}
+.tbl .hi{color:var(--cache);font-weight:600;}
+.tbl.text td{text-align:left;}
+
+/* footer */
+footer{border-top:1px solid var(--rule);padding:2rem 0 3.5rem;font-family:var(--mono);
+  font-size:.72rem;line-height:1.85;color:var(--muted);}
+footer a{color:var(--cache);}
+:focus-visible{outline:2px solid var(--cache);outline-offset:3px;}
+
+/* svg primitives */
+.p-frame{fill:none;stroke:var(--rule);stroke-width:1;}
+.p-grid{stroke:var(--rule-soft);stroke-width:1;}
+.p-sm{font-family:var(--mono);font-size:10px;fill:var(--muted);}
+.p-tag{font-family:var(--mono);font-size:9px;letter-spacing:.12em;fill:var(--muted);}
+.p-lbl{font-family:var(--mono);font-size:10.5px;fill:var(--ink-soft);}
+.p-strong{font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--ink);}
+.box{fill:var(--surface);stroke:var(--rule);stroke-width:1.2;}
+.box-c{fill:var(--cache-wash);stroke:var(--cache);stroke-width:1.4;}
+.box-l{fill:var(--llm-wash);stroke:var(--llm);stroke-width:1.4;}
+.box-b{fill:var(--build-wash);stroke:var(--build);stroke-width:1.4;}
+.box-w{fill:var(--warn-wash);stroke:var(--warn);stroke-width:1.4;stroke-dasharray:4 3;}
+.zone{fill:none;stroke:var(--rule);stroke-width:1;stroke-dasharray:3 4;}
+.ar{fill:none;stroke:var(--muted);stroke-width:1.3;}
+.ar-c{fill:none;stroke:var(--cache);stroke-width:1.6;}
+.ar-l{fill:none;stroke:var(--llm);stroke-width:1.6;}
+.ar-b{fill:none;stroke:var(--build);stroke-width:1.6;}
+.ar-w{fill:none;stroke:var(--warn);stroke-width:1.4;stroke-dasharray:4 3;}
+.t-c{fill:var(--cache);} .t-l{fill:var(--llm);} .t-b{fill:var(--build);} .t-w{fill:var(--warn);}
+.s-c{fill:none;stroke:var(--cache);stroke-width:2.4;stroke-linejoin:round;}
+.s-l{fill:none;stroke:var(--llm);stroke-width:2;stroke-dasharray:6 4;}
+.f-c{fill:var(--cache);} .f-l{fill:var(--llm);} .f-b{fill:var(--build);}
+</style>
+</head>
+<body>
+<header class="top"><div class="frame">
+  <span class="brand">
+    <span class="mark" role="img" aria-label="Site mark"></span>
+    <span class="kicker">Harness Design Notes</span>
+  </span>
+  <span class="legend-mini">
+    <span><i class="sw-c"></i>cache</span>
+    <span><i class="sw-l"></i>frontier model</span>
+    <span><i class="sw-b"></i>builder</span>
+  </span>
+  <a class="backlink" href="/">&#8592; All notes</a>
+</div></header>
+
+<div class="hero"><div class="frame">
+  <p class="eyebrow">Paper notes &middot; Inference cost</p>
+  <h1>Cache the Reasoning, Not the&nbsp;Answer</h1>
+  <p class="standfirst">A frontier model solves a problem once. A builder model turns that reasoning into Python that runs on a CPU, with a 1B model only to read the input. On a cache hit the big model is never called, and the query costs 16&ndash;291&times; less. Those savings grow with how hard the problem is. They shrink with everything that makes a task hard to <em>program</em>.</p>
+  <p class="source">Reading: <a href="https://arxiv.org/abs/2611.09891">CPU-ARC: Agentic Reasoning Caching for on-CPU Reasoning Reuse</a> &middot; arXiv 2611.09891 &middot; Nov 2026</p>
+</div></div>
+
+<main><div class="frame">
+
+<div class="col">
+<h2><span class="claim">The bet</span>Finding a solution and running it are two different jobs</h2>
+
+<p class="lede">The paper rests on two observations, and both are easiest to see on one small problem.</p>
+
+<p>Ask a model how many positive divisors 196 has. It factors 196 = 2&sup2; &times; 7&sup2;, recalls that the count is the product of (exponent&nbsp;+&nbsp;1), and answers (2+1)(2+1) = 9. Now ask about 144, or reword the question. The reasoning steps don&rsquo;t change; only the numbers that pass through them do. Yet a language model pays for the whole chain of thought again every time.</p>
+
+<ol class="steps">
+  <li><strong>Once a problem is solved, running the solution needs almost no language model.</strong> What&rsquo;s left is computation: factor, add one, multiply.</li>
+  <li><strong>One reasoning trace covers a whole class of problems.</strong> Every problem that is <em>equirational</em> to the original (solvable by the same reasoning) can reuse it.</li>
+</ol>
+
+<p>So the authors cache the <em>reasoning</em> as a parameterised program, not the answer. They call the result an <strong>agentic reasoning cache</strong> (ARC).</p>
+
+<h2><span class="claim">The mechanism</span>Functions that find each other by meaning</h2>
+
+<p>An ARC entry is a network of <strong>semantic functions</strong>. Each is a plain Python callable that takes a <code>Context</code> and returns a dict whose keys are natural-language descriptions. Nothing is referenced by name. Inputs are fetched by description, and other functions are called by describing what you want done:</p>
+
+<pre class="code"><span class="k">def</span> check_rotation(ctx):
+    narrate(ctx, <span class="c">"Checking if a valid rotation maps blue vertices to red"</span>)
+    B = load(ctx, <span class="c">"the blue vertex set B"</span>, d_type=list)
+    n = load(ctx, <span class="c">"the vertex count n"</span>, d_type=int)
+    r = do(ctx, <span class="c">"Compute the difference set D(B) for subset B with modulus n"</span>,
+           payloads={<span class="c">"the set of vertices B"</span>: B, <span class="c">"the modulus n"</span>: n})
+    D = load(r, <span class="c">"difference set"</span>, d_type=set, ctx=ctx)
+    valid = set(range(n)) - D
+    <span class="k">return</span> {<span class="c">"valid rotation exists"</span>: len(valid) &gt; 0, <span class="c">"valid k values"</span>: sorted(valid)}</pre>
+
+<p><code>load</code> and <code>do</code> resolve by vector search over a 300M-parameter embedding model, so a function written for one problem can be found and reused by another without anyone knowing its name. <code>lm</code> and <code>extract</code> call the small target model for the bits that really are language: classification, pulling a value out of text, converting a messy value to a Python type. <code>narrate</code> writes the human-readable trace that becomes the explanation.</p>
+
+<p>Three models play three roles. The <strong>source</strong> (Claude Opus&nbsp;4.5) is the expensive intelligence being cached. The <strong>builder</strong> (also Opus) writes the cache. The <strong>target</strong> (Haiku&nbsp;4.5 at first, then a fine-tuned Llama&nbsp;3.2&nbsp;1B) is the only model used when the cache runs.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 1</span><span class="fig-name">The loop: serve online, build offline</span></div>
+  <div class="plate">
+    <div class="scroller">
+    <svg viewBox="0 0 880 560" role="img" aria-label="Flow diagram. A query is embedded and matched against cached entry points. On a hit, the 1B target model extracts parameters and the cached code runs on CPU, returning an answer and a narration trace. On a miss or a crash, the frontier model answers, and its transcript goes to the offline builder, which writes, tests and registers semantic functions into the master cache.">
+      <defs>
+        <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker>
+      </defs>
+
+      <!-- zones -->
+      <rect x="10" y="10" width="860" height="250" rx="4" class="zone"/>
+      <text x="22" y="28" class="p-tag">ONLINE &#183; SERVING EACH QUERY</text>
+      <rect x="10" y="290" width="860" height="260" rx="4" class="zone"/>
+      <text x="22" y="308" class="p-tag">OFFLINE &#183; BUILDING ENTRIES</text>
+
+      <!-- online row -->
+      <rect x="24" y="52" width="92" height="44" rx="3" class="box"/>
+      <text x="70" y="78" class="p-strong" text-anchor="middle">query</text>
+
+      <rect x="146" y="44" width="148" height="60" rx="3" class="box-c"/>
+      <text x="220" y="66" class="p-strong" text-anchor="middle">1 &#183; match</text>
+      <text x="220" y="82" class="p-sm" text-anchor="middle">embed, cosine search</text>
+      <text x="220" y="95" class="p-sm" text-anchor="middle">over entry points</text>
+
+      <rect x="324" y="44" width="148" height="60" rx="3" class="box-c"/>
+      <text x="398" y="66" class="p-strong" text-anchor="middle">2 &#183; extract</text>
+      <text x="398" y="82" class="p-sm" text-anchor="middle">1B model pulls</text>
+      <text x="398" y="95" class="p-sm" text-anchor="middle">parameter values</text>
+
+      <rect x="502" y="44" width="148" height="60" rx="3" class="box-c"/>
+      <text x="576" y="66" class="p-strong" text-anchor="middle">3 &#183; run</text>
+      <text x="576" y="82" class="p-sm" text-anchor="middle">CPU code + do()/load()</text>
+      <text x="576" y="95" class="p-sm" text-anchor="middle">+ a few lm() calls</text>
+
+      <rect x="680" y="44" width="176" height="60" rx="3" class="box-c"/>
+      <text x="768" y="66" class="p-strong t-c" text-anchor="middle">4 &#183; HIT</text>
+      <text x="768" y="82" class="p-sm" text-anchor="middle">answer + narration</text>
+      <text x="768" y="95" class="p-sm" text-anchor="middle">~$0.0004 / query</text>
+
+      <path d="M116,74 H144" class="ar-c" marker-end="url(#ah)"/>
+      <path d="M294,74 H322" class="ar-c" marker-end="url(#ah)"/>
+      <text x="308" y="66" class="p-sm" text-anchor="middle">&#8805;&#964;</text>
+      <path d="M472,74 H500" class="ar-c" marker-end="url(#ah)"/>
+      <path d="M650,74 H678" class="ar-c" marker-end="url(#ah)"/>
+
+      <!-- miss paths -->
+      <path d="M220,104 V180 H322" class="ar-l" marker-end="url(#ah)"/>
+      <text x="230" y="150" class="p-lbl t-l">miss (&lt; &#964;)</text>
+      <path d="M576,104 V140 H460 V160" class="ar-l" marker-end="url(#ah)"/>
+      <text x="586" y="128" class="p-lbl t-l">crash / False</text>
+
+      <rect x="324" y="162" width="232" height="56" rx="3" class="box-l"/>
+      <text x="440" y="184" class="p-strong" text-anchor="middle">frontier model answers</text>
+      <text x="440" y="201" class="p-sm" text-anchor="middle">full price, ~$0.01&#8211;0.12 / query</text>
+
+      <!-- false hit -->
+      <rect x="680" y="150" width="176" height="76" rx="3" class="box-w"/>
+      <text x="768" y="170" class="p-strong t-w" text-anchor="middle">false hit</text>
+      <text x="768" y="186" class="p-sm" text-anchor="middle">looks similar, needs</text>
+      <text x="768" y="199" class="p-sm" text-anchor="middle">different reasoning &#8594;</text>
+      <text x="768" y="212" class="p-sm" text-anchor="middle">confident wrong answer</text>
+      <path d="M768,104 V148" class="ar-w" marker-end="url(#ah)"/>
+      <text x="778" y="132" class="p-sm t-w">no route back</text>
+
+      <!-- transcript down -->
+      <path d="M440,218 V330" class="ar-b" marker-end="url(#ah)"/>
+      <text x="450" y="246" class="p-lbl t-b">transcript S(q)</text>
+
+      <!-- builder -->
+      <rect x="40" y="332" width="560" height="196" rx="3" class="box-b"/>
+      <text x="56" y="354" class="p-strong t-b">builder (Opus)</text>
+      <text x="56" y="376" class="p-lbl">P1  separate input from final answer</text>
+      <text x="56" y="394" class="p-lbl">P2  break the reasoning into function-sized steps</text>
+      <text x="56" y="412" class="p-lbl">P3  find parameters + valid ranges &#8594; template q(&#8226;,&#8230;,&#8226;)</text>
+      <text x="56" y="430" class="p-lbl">P4  plan the function graph (fine / medium / coarse)</text>
+      <text x="56" y="448" class="p-lbl">P5  per function, bottom-up: reuse? &#8594; write &#8594; check &#8594; run</text>
+      <text x="56" y="466" class="p-lbl">     &#8594; judge vs transcript &#8634; rewrite until it passes</text>
+      <text x="56" y="488" class="p-lbl">full-pipeline test: vs transcript <tspan class="t-w">+ golden label</tspan></text>
+      <text x="56" y="506" class="p-lbl">                    + 1B extraction round trip &#215; N</text>
+
+      <!-- master cache -->
+      <rect x="640" y="380" width="216" height="76" rx="3" class="box-c"/>
+      <text x="748" y="404" class="p-strong" text-anchor="middle">master cache</text>
+      <text x="748" y="421" class="p-sm" text-anchor="middle">functions + entry points</text>
+      <text x="748" y="436" class="p-sm" text-anchor="middle">(template and original query)</text>
+      <path d="M600,418 H638" class="ar-c" marker-end="url(#ah)"/>
+      <text x="619" y="410" class="p-sm" text-anchor="middle">merge</text>
+
+      <path d="M856,418 H866 V276 H160 V106" class="ar-c" marker-end="url(#ah)"/>
+      <text x="610" y="270" class="p-sm t-c">new entries become matchable at step 1</text>
+
+      <!-- maintenance -->
+      <text x="640" y="482" class="p-tag">LATER</text>
+      <text x="640" y="499" class="p-sm">log 1B calls &#8594; fine-tune smaller T</text>
+      <text x="640" y="514" class="p-sm">stable &#8594; compile to plain Python</text>
+    </svg>
+    </div>
+  </div>
+  <figcaption><b>Drawn from &sect;2.2 of the paper.</b> The miss&nbsp;&#8594;&nbsp;build&nbsp;&#8594;&nbsp;serve cycle is what &sect;4 implies for a live endpoint; the experiments build one cache per benchmark problem in a batch. The red path is not in the paper: nothing in the live path sends a wrong answer back for repair, because the fallback catches only misses and crashes.</figcaption>
+</figure>
+
+<div class="col">
+<p>Once a cache stops changing it can be <strong>compiled</strong>: every <code>do</code> and <code>load</code> lookup is resolved once and replaced with a direct call or a dictionary read. What&rsquo;s left is a standalone Python file with no embedding model and no vector store, which you can read, version and ship like any other code.</p>
+
+<h2><span class="claim">What it bought</span>Frontier accuracy, two orders of magnitude cheaper per hit</h2>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 2</span><span class="fig-name">Results across eight benchmarks (paper, Table&nbsp;2)</span></div>
+  <div class="plate" style="padding:0;border:none;background:none;">
+    <div class="scroller"><table class="tbl">
+      <thead><tr>
+        <th scope="col">Benchmark</th>
+        <th scope="col">Source acc.</th>
+        <th scope="col">Cache acc.</th>
+        <th scope="col">Reworded</th>
+        <th scope="col">New numbers</th>
+        <th scope="col">Both</th>
+        <th scope="col">Build &times;</th>
+        <th scope="col">Savings &times;</th>
+      </tr></thead>
+      <tbody>
+        <tr><td><b>MATH-500</b></td><td>98.6</td><td class="up">98.8</td><td>96.7</td><td>94.5</td><td>91.6</td><td>30.5</td><td class="hi">88.7</td></tr>
+        <tr><td><b>AIME &rsquo;24</b></td><td>100.0</td><td>100.0</td><td>96.0</td><td>99.3</td><td>95.1</td><td>12.9</td><td class="hi">262.4</td></tr>
+        <tr><td><b>AIME &rsquo;25</b></td><td>83.3</td><td class="up">93.3</td><td>98.4</td><td>91.2</td><td>93.4</td><td>12.1</td><td class="hi">291.1</td></tr>
+        <tr><td><b>AIME &rsquo;26</b></td><td>90.0</td><td class="up">96.7</td><td>97.9</td><td>90.9</td><td>90.8</td><td>12.9</td><td class="hi">281.4</td></tr>
+        <tr><td><b>GPQA Diamond</b></td><td>83.8</td><td>83.8</td><td>93.8</td><td>93.9</td><td>94.0</td><td>25.1</td><td class="hi">38.1</td></tr>
+        <tr><td><b>GSM8K</b></td><td>98.5</td><td class="dn">98.0</td><td>96.2</td><td>94.2</td><td>92.5</td><td>83.7</td><td class="hi">16.3</td></tr>
+        <tr><td><b>MMLU-Pro</b></td><td>88.0</td><td class="up">89.0</td><td>95.7</td><td>96.7</td><td>91.9</td><td>40.8</td><td class="hi">22.9</td></tr>
+        <tr><td><b>SciBench</b></td><td>85.2</td><td class="up">88.2</td><td>97.5</td><td>98.8</td><td>96.4</td><td>29.0</td><td class="hi">83.0</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <figcaption><b>Percentages and multipliers as reported.</b> Accuracy is against the golden label. The three perturbation columns are pass rates on variants of each cached problem, tested only on entries that were already correct. Build&nbsp;&times; = builder cost &divide; one source call; Savings&nbsp;&times; = source cost &divide; cache cost per query. Cache cost is $0.0004&ndash;0.0019 per query at the fine-tuned 1B model&rsquo;s rates.</figcaption>
+</figure>
+
+<div class="col">
+<p>The cache matches or beats the model it was built from on seven of eight benchmarks, and holds above 90% when problems are reworded, re-numbered, or both. The authors explain the AIME gains (83.3&nbsp;&#8594;&nbsp;93.3 on &rsquo;25) by code not making the arithmetic slips the source makes in its final steps. There is a less flattering explanation too, which comes up in the caveats.</p>
+
+<h2><span class="claim">The arithmetic</span>Savings grow with difficulty, because the cache side stays flat</h2>
+
+<p>The intuitive guess is that savings should fall as tasks get harder. The table says the opposite: AIME saves 262&ndash;291&times;, GSM8K only 16&times;. The reason is in what each side of the ratio pays for. The source pays for every reasoning token, about 4,700 output tokens on an AIME problem against 390 on GSM8K. The cache pays for parameter extraction and some CPU time, roughly $0.0004 whether the code underneath is two lines of arithmetic or a modular search.</p>
+
+<p>Building is relatively cheaper for hard problems too: 12&times; a source call for AIME, 84&times; for GSM8K, because a long trace often collapses into a short program. Every entry has a break-even point:</p>
+
+<blockquote>net saving per entry = hits &times; (source cost &minus; cache cost) &minus; build cost</blockquote>
+
+<p>The paper reports about 13 matching queries to pay back an AIME entry and about 90 for GSM8K. The calculator below lets you set the one thing the paper doesn&rsquo;t measure: how often an entry actually gets hit.</p>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 3</span><span class="fig-name">Does an entry pay for itself?</span><span class="fig-live">interactive</span></div>
+  <div class="plate">
+    <div class="howto"><b>How to read it.</b> Pick a benchmark to load its measured per-query costs. The <b>dashed blue line</b> is cumulative spend if every matching query goes to the frontier model. The <b>teal line</b> is the cache: build cost up front, then near-zero per hit. Where they cross is break-even. Set <b>hits</b> to how many queries you expect to match this entry, and <b>false-hit rate</b> to the share of hits that come back confidently wrong, each priced as one more frontier call to detect and redo.</div>
+    <div class="ctl">
+      <span class="grp">Benchmark</span>
+      <span class="seg" id="f3-bench"></span>
+    </div>
+    <div class="ctl">
+      <label for="f3-hits">hits per entry <input type="range" id="f3-hits" min="1" max="200" value="60"><span class="readout" id="f3-hitsv">60</span></label>
+      <label for="f3-fh">false-hit rate <input type="range" id="f3-fh" min="0" max="30" value="0"><span class="readout" id="f3-fhv">0%</span></label>
+    </div>
+    <div class="scroller"><svg id="f3-svg" viewBox="0 0 800 300" role="img" aria-label="Cumulative cost of frontier model versus cache over number of hits"></svg></div>
+    <div class="stats" id="f3-stats"></div>
+    <p class="note" id="f3-note"></p>
+  </div>
+  <figcaption><b>Costs from the paper&rsquo;s Appendix&nbsp;C,</b> March 2026 retail API prices. The false-hit penalty is this note&rsquo;s assumption, not the paper&rsquo;s: it charges one extra source call per wrong answer and ignores whatever the wrong answer cost downstream, so it is a lower bound.</figcaption>
+</figure>
+
+<div class="col">
+<h2><span class="claim">What it really depends on</span>How much of the task a normal program can do</h2>
+
+<p>Difficulty is the wrong axis. The method swaps LLM reasoning for code, so it pays exactly as much as code can take over. That splits into three separate questions, and each limits something different.</p>
+
+<dl class="rule"><dt>Solution is code</dt><dd>Limits <b>cost and correctness</b>. Arithmetic, search and set operations run on the CPU for nothing and never slip. Steps that need judgment become <code>lm()</code> calls to a 1B model. On GPQA the target model writes about 4,500 output tokens per query against 76 on AIME, and savings drop from 291&times; to 38&times;. Knowledge isn&rsquo;t automatically &ldquo;not code&rdquo;: in a narrow problem class the builder hard-codes constants and tables.</dd></dl>
+<dl class="rule"><dt>Same procedure</dt><dd>Limits <b>coverage</b>. A task can be fully programmable and still need a different program per input. An entry only covers inputs that follow the reasoning path the source model&rsquo;s single trace took. The paper&rsquo;s parameter changes are filtered to stay on that path, so this is never tested.</dd></dl>
+<dl class="rule"><dt>Input is parseable</dt><dd>Limits <b>whether a query hits at all</b>. The 1B model has to pull clean parameters out of free text. Numbers, lists and named entities extract well; a long email thread doesn&rsquo;t. Extraction is already the largest share of run-time cost in Appendix&nbsp;C.</dd></dl>
+
+<p>The best case is a task that is <strong>hard to work out but becomes a fixed program over clearly extractable parameters</strong>. That describes competition maths, and a lot of enterprise agent work where the same instructions get applied to a stream of similar payloads, which is where the authors say they&rsquo;re headed.</p>
+
+<h2><span class="claim">The worst case</span>Not &ldquo;no savings&rdquo;, but confident wrong answers</h2>
+
+<p>Invert all three properties and add rarity (judgment at every step, a different procedure per instance, unstructured input, tasks that seldom repeat) and every query misses. You pay for building and for a lookup on every request, and save nothing. That is a loss, but a visible and limited one.</p>
+
+<p>The harmful case is the <strong>false hit</strong>: a query that looks like a cached problem but needs different reasoning. It might have a parameter outside the range the code assumed, or hit a case the source trace never took (an obtuse angle where the trace only ever saw acute ones), or swap &ldquo;at least one&rdquo; for &ldquo;exactly one&rdquo;. The embedding clears the threshold, extraction succeeds, the code runs, and out comes a well-narrated wrong answer. An LLM might have noticed something was off; a program just runs. And because the fallback only catches misses and crashes, nothing routes the error back.</p>
+
+<p>A quieter version of the same problem: <strong>rules that change</strong>. Tax brackets, pricing policies and API behaviour get frozen into the cached functions, which keep applying last quarter&rsquo;s rules correctly and confidently. The worst fit overall is varied, judgment-heavy, rarely repeated work where a wrong answer costs more than a slow one.</p>
+
+<h2><span class="claim">Read before you cite</span>What the evaluation doesn&rsquo;t show</h2>
+</div>
+
+<figure>
+  <div class="fig-head"><span class="fig-num">Fig 4</span><span class="fig-name">Caveats, by how much they move the headline</span></div>
+  <div class="plate" style="padding:0;border:none;background:none;">
+    <div class="scroller"><table class="tbl text">
+      <thead><tr><th scope="col">Caveat</th><th scope="col">What happens</th><th scope="col">Affects</th></tr></thead>
+      <tbody>
+        <tr><td><b>Golden label in the build loop</b></td><td>Phase&nbsp;5 tests the full pipeline against the benchmark&rsquo;s golden label and rewrites until it passes. Part of &ldquo;cache beats source&rdquo; is the builder seeing the answer.</td><td>Accuracy</td></tr>
+        <tr><td><b>No hit or false-hit rate</b></td><td>Each problem gets its own cache and is tested only on its own variants. Nobody sends real mixed traffic, so neither coverage nor wrong matches above the threshold are measured.</td><td>Economics, safety</td></tr>
+        <tr><td><b>Robustness on survivors only</b></td><td>Perturbation tests run only on entries that were already correct, so the 90%+ figures are conditional.</td><td>Robustness</td></tr>
+        <tr><td><b>One family grades itself</b></td><td>Opus&nbsp;4.5 is source, builder, perturbation generator and every judge.</td><td>All metrics</td></tr>
+        <tr><td><b>1B model trained near the test</b></td><td>Fine-tuned on about 20% of the same evaluation&rsquo;s call logs; no held-out split is described.</td><td>Cache accuracy</td></tr>
+        <tr><td><b>No latency numbers</b></td><td>The edge and on-CPU framing is never measured in time.</td><td>Deployment claims</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <figcaption><b>This note&rsquo;s reading,</b> not the authors&rsquo;. Each row cites a section of the paper you can check: &sect;2.2.1 Phase&nbsp;5, &sect;3.2, &sect;3.4, &sect;2.2.4 and Appendix&nbsp;D.</figcaption>
+</figure>
+
+<div class="col">
+<h2><span class="claim">Not what it sounds like</span>This isn&rsquo;t reasoning-as-memory, and &ldquo;neuralware&rdquo; isn&rsquo;t either</h2>
+
+<p>The title suggests reasoning traces stored as notes and retrieved into a model&rsquo;s context for later tasks, as a kind of memory. The paper calls that <em>modular caching</em> and argues against it: even a perfect retrieval still needs a full LLM generation to read the notes and reason again, and nothing guarantees the model uses them correctly. ARC retrieves <em>code to run</em>, and on a hit the big model is never called. That&rsquo;s the whole trade: far less flexibility, in exchange for a hundredfold cost cut and an artifact you can audit.</p>
+
+<p>&ldquo;Neuralware&rdquo;, in the closing section, is a claim about where models sit in the stack. Today the LLM is the top layer, where the thinking happens. The authors imagine a library of cached semantic functions taking that place, with neural models pushed down to a support layer that parses, extracts and converts, the way firmware sits under applications. The LLM isn&rsquo;t given a memory. It&rsquo;s demoted.</p>
+
+<h2><span class="claim">What to do Monday</span>The takeaway</h2>
+
+<p>If you run an agent endpoint that applies the same instructions to a steady stream of similar payloads, this is worth a prototype. Log the traffic for a few weeks, cluster it, and look for clusters whose answers are a fixed procedure over a handful of extractable values. Those are your cacheable endpoints, and a per-query saving of 20&ndash;300&times; is large enough to survive a lot of pessimism in the paper&rsquo;s numbers.</p>
+
+<p>Before you ship it, add the missing piece of the loop: a check on <em>hits</em>, not just misses. That could be range checks generated from the builder&rsquo;s Phase&nbsp;3 validity analysis and enforced at run time, a sampled audit of hits against the frontier model, or both. Then measure the two numbers the paper doesn&rsquo;t report, hit rate and false-hit rate, on your own traffic. Those decide whether the method pays off, not the benchmark table.</p>
+</div>
+
+</div></main>
+
+<footer><div class="frame">
+  Figures marked as models are analytical, not measurements; assumptions are stated in each caption. Benchmark figures are the paper&rsquo;s own.<br>
+  Built as static HTML. Source: <a href="https://github.com/swalla02/swalla02.github.io">github.com/swalla02/swalla02.github.io</a><br>
+  Page counts via GoatCounter: no cookies, no personal data, nothing that identifies you.
+</div></footer>
+
+<script>
+(function(){
+"use strict";
+function $(id){ return document.getElementById(id); }
+function T(x,y,s,cls,anchor,extra){ return '<text x="'+x+'" y="'+y+'" class="'+cls+'"'+(anchor?' text-anchor="'+anchor+'"':'')+(extra||'')+'>'+s+'</text>'; }
+
+/* per-query costs from the paper, Table 2 / Appendix C ($ per sample).
+   Cache cost is derived as source / reported savings multiplier, so the
+   per-hit saving shown matches Table 2 instead of the 4-decimal rounding. */
+var B={
+  "MATH-500":    {src:0.0388, bld:1.1818, sav:88.7},
+  "AIME '25":    {src:0.1203, bld:1.4517, sav:291.1},
+  "GPQA":        {src:0.0708, bld:1.7781, sav:38.1},
+  "GSM8K":       {src:0.0101, bld:0.8481, sav:16.3},
+  "MMLU-Pro":    {src:0.0345, bld:1.4084, sav:22.9},
+  "SciBench":    {src:0.0434, bld:1.2572, sav:83.0}
+};
+Object.keys(B).forEach(function(k){ B[k].cch=B[k].src/B[k].sav; });
+var names=Object.keys(B), cur="AIME '25", hits=60, fh=0;
+var seg=$('f3-bench');
+seg.innerHTML=names.map(function(n){ return '<button class="btn" type="button" data-b="'+n+'" aria-pressed="'+(n===cur)+'">'+n+'</button>'; }).join('');
+seg.addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  cur=b.getAttribute('data-b');
+  Array.prototype.forEach.call(seg.children,function(c){ c.setAttribute('aria-pressed',String(c===b)); });
+  draw();
+});
+function money(v){ return v===0?'$0':v>=10?'$'+v.toFixed(0):v>=1?'$'+v.toFixed(2):'$'+v.toFixed(3); }
+
+function draw(){
+  var d=B[cur], N=hits, f=fh/100;
+  var perHit=d.cch + f*d.src;                 // wrong answers redone on the frontier model
+  var llm=function(n){ return n*d.src; };
+  var arc=function(n){ return d.bld + n*perHit; };
+  var gain=d.src-perHit;
+  var be = gain>0 ? Math.ceil(d.bld/gain) : Infinity;
+
+  var W=800,H=300,x0=62,y0=26,h=220,w=W-x0-24;
+  var maxY=Math.max(llm(N),arc(N))*1.08;
+  function X(n){ return x0+n/N*w; }
+  function Y(v){ return y0+h-v/maxY*h; }
+  var o='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" class="p-frame"/>';
+  for(var g=0;g<=4;g++){ var v=maxY*g/4, yy=Y(v);
+    o+='<line x1="'+x0+'" y1="'+yy.toFixed(1)+'" x2="'+(x0+w)+'" y2="'+yy.toFixed(1)+'" class="p-grid"/>';
+    o+=T(x0-8,(yy+3.5).toFixed(1),money(v),'p-sm','end');
+  }
+  for(var t=0;t<=4;t++){ var n=Math.round(N*t/4); o+=T(X(n).toFixed(1),y0+h+16,n,'p-sm','middle'); }
+  o+=T(x0+w/2,y0+h+34,'MATCHING QUERIES (HITS)','p-tag','middle');
+  o+='<line x1="'+X(0)+'" y1="'+Y(llm(0)).toFixed(1)+'" x2="'+X(N)+'" y2="'+Y(llm(N)).toFixed(1)+'" class="s-l"/>';
+  o+='<line x1="'+X(0)+'" y1="'+Y(arc(0)).toFixed(1)+'" x2="'+X(N)+'" y2="'+Y(arc(N)).toFixed(1)+'" class="s-c"/>';
+  if(be<=N){
+    var bx=X(be), by=Y(arc(be));
+    o+='<line x1="'+bx.toFixed(1)+'" y1="'+y0+'" x2="'+bx.toFixed(1)+'" y2="'+(y0+h)+'" stroke="var(--build)" stroke-dasharray="4 3"/>';
+    o+='<circle cx="'+bx.toFixed(1)+'" cy="'+by.toFixed(1)+'" r="4" class="f-b"/>';
+    o+=T((bx+8).toFixed(1),y0+h-10,'break-even at '+be+' hits','p-lbl',null,' style="fill:var(--build);font-weight:600"');
+  }
+  o+='<rect x="'+(x0+12)+'" y="'+(y0+12)+'" width="14" height="4" class="f-l" rx="1"/>'+T(x0+32,y0+17,'frontier model every time','p-sm');
+  o+='<rect x="'+(x0+12)+'" y="'+(y0+30)+'" width="14" height="4" class="f-c" rx="1"/>'+T(x0+32,y0+35,'build once, then cache','p-sm');
+  $('f3-svg').innerHTML=o;
+
+  var net=llm(N)-arc(N);
+  var eff = N>0 ? llm(N)/arc(N) : 0;
+  $('f3-stats').innerHTML=
+    '<div class="stat"><span class="k">build cost</span><span class="v v-b">'+money(d.bld)+'</span><span class="s">'+(d.bld/d.src).toFixed(0)+'&times; one source call</span></div>'+
+    '<div class="stat"><span class="k">per-hit saving</span><span class="v v-c">'+(d.src/perHit).toFixed(0)+'&times;</span><span class="s">'+(f>0?'after false-hit redo':'as reported')+'</span></div>'+
+    '<div class="stat"><span class="k">break-even</span><span class="v">'+(isFinite(be)?be+' hits':'never')+'</span><span class="s">matching queries</span></div>'+
+    '<div class="stat"><span class="k">net at '+N+' hits</span><span class="v '+(net>=0?'v-ok':'v-warn')+'">'+(net>=0?'+':'&minus;')+money(Math.abs(net))+'</span><span class="s">'+(net>=0?eff.toFixed(1)+'&times; cheaper overall':'entry not yet paid back')+'</span></div>';
+
+  var msg;
+  if(net<0) msg='At '+N+' hits the entry hasn&rsquo;t paid back its build cost yet. On a task that rarely repeats, this is where every entry lives.';
+  else if(eff<3) msg='Paid back, but the overall saving ('+eff.toFixed(1)+'&times;) is far below the per-hit headline, because the build cost is still a large share of total spend.';
+  else msg='Comfortably paid back. Over '+N+' hits the entry is '+eff.toFixed(1)+'&times; cheaper than calling the frontier model each time.';
+  if(f>0) msg+=' At a '+fh+'% false-hit rate the per-hit saving drops from '+(d.src/d.cch).toFixed(0)+'&times; to '+(d.src/perHit).toFixed(0)+'&times;: <b>a small error rate swamps a tiny per-query cost.</b>';
+  $('f3-note').innerHTML=msg;
+}
+$('f3-hits').addEventListener('input',function(){ hits=+this.value; $('f3-hitsv').textContent=this.value; draw(); });
+$('f3-fh').addEventListener('input',function(){ fh=+this.value; $('f3-fhv').textContent=this.value+'%'; draw(); });
+draw();
+})();
+</script>
+
+<script>
+// GoatCounter: cookieless page counts, no personal data, no consent banner.
+// Production host only, so local previews are not counted.
+if (location.hostname === "swalla02.github.io") {
+  var gc = document.createElement("script");
+  gc.async = true;
+  gc.src = "//gc.zgo.at/count.js";
+  gc.setAttribute("data-goatcounter", "https://swalla02.goatcounter.com/count");
+  document.head.appendChild(gc);
+}
+</script>
+</body>
+</html>

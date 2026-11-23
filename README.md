@@ -9,6 +9,7 @@ Static site, no build step. Every page is self-contained HTML.
 - `/speculative-decoding/` Speculative Decoding
 - `/does-speculation-pay/` Does Speculation Pay? — Speculative tool calling, part 2
 - `/looped-transformers/` Looped Transformers — interactive
+- `/reasoning-caches/` Cache the Reasoning, Not the Answer — CPU-ARC paper notes, interactive
 - `/assets/` icons and Open Graph cards
 
 Bump the `?v=` query on the favicon links in each page's head to force browsers to refetch icons.
